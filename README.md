@@ -52,7 +52,9 @@ void loop() {
 ```
 
 See `examples/BasicNode` for a fuller version, including a pin you can
-hold low at boot to force reconfiguration.
+hold low at boot to force reconfiguration, or `examples/BME280Node`
+for a real sensor (temperature, dew point, humidity, pressure) --
+needs the separate "SparkFun BME280" library from the Library Manager.
 
 ## API
 
