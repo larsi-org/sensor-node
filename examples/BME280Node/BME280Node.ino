@@ -19,7 +19,8 @@
 // below entirely if you don't need it.
 const int kResetPin = 9;
 
-const unsigned long kReadIntervalMs = 60000;
+// The BME280 shouldn't be polled too often -- give it 3 minutes between reads.
+const unsigned long kReadIntervalMs = 3UL * 60 * 1000;
 
 SensorNode node;
 BME280 bme;
