@@ -3,6 +3,7 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <time.h>
 
 #include "SensorNodePortal.h"
 
@@ -44,6 +45,23 @@ LPAvTK33sefOT6jEm0pUBsV/fdUID+Ic/n4XuKxe9tQWskMJDE32p2u0mYRlynqI
 -----END CERTIFICATE-----
 )EOF";
 
+// WiFiClientSecure checks the pinned cert's validity dates against the
+// device clock, which boots near the epoch -- without this, every TLS
+// connection fails with HTTPC_ERROR_CONNECTION_REFUSED before a single
+// byte is sent, since the cert looks "not yet valid" until synced.
+void syncTime() {
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("[SensorNode] Waiting for NTP time sync");
+  time_t now = time(nullptr);
+  unsigned long start = millis();
+  while (now < 1700000000 && millis() - start < 10000) {
+    delay(250);
+    Serial.print(".");
+    now = time(nullptr);
+  }
+  Serial.println();
+}
+
 }  // namespace
 
 void SensorNode::begin(unsigned long connectTimeoutMs) {
@@ -70,6 +88,7 @@ void SensorNode::begin(unsigned long connectTimeoutMs) {
   }
 
   Serial.printf("[SensorNode] Connected, IP %s\n", WiFi.localIP().toString().c_str());
+  syncTime();
 }
 
 void SensorNode::resetConfig() { clearSensorNodeConfig(); }
