@@ -87,7 +87,7 @@ String buildFormPage() {
   page += "<label>Wi-Fi Password</label><input type=\"password\" name=\"password\">";
   page += "<label>Node Name</label><input type=\"text\" name=\"nodeName\" maxlength=\"32\">";
   page += "<label>Device ID (0-255)</label><input type=\"number\" name=\"deviceId\" min=\"0\" max=\"255\" value=\"0\" required>";
-  page += "<label>Write Key</label><input type=\"text\" name=\"writeKey\" required>";
+  page += "<label>Write Key (16 characters)</label><input type=\"text\" name=\"writeKey\" minlength=\"16\" maxlength=\"16\" required>";
   page += "<button type=\"submit\">Save &amp; Reboot</button>";
   page += "</form></body></html>";
   return page;
@@ -103,8 +103,12 @@ void handleSave() {
   config.deviceId = (uint8_t)constrain(server.arg("deviceId").toInt(), 0, 255);
   config.writeKey = server.arg("writeKey");
 
-  if (!config.isComplete()) {
-    server.send(400, "text/html", "<p>Wi-Fi network and write key are required. <a href=\"/\">Back</a></p>");
+  if (config.ssid.length() == 0) {
+    server.send(400, "text/html", "<p>Wi-Fi network is required. <a href=\"/\">Back</a></p>");
+    return;
+  }
+  if (config.writeKey.length() != 16) {
+    server.send(400, "text/html", "<p>Write key must be exactly 16 characters. <a href=\"/\">Back</a></p>");
     return;
   }
 

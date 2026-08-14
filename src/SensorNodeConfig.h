@@ -7,9 +7,9 @@ struct SensorNodeConfig {
   String password;
   String nodeName;
   uint8_t deviceId = 0;
-  String writeKey;
+  String writeKey;  // location.WriteKey is varchar(16) -- always exactly 16 chars
 
-  bool isComplete() const { return ssid.length() > 0 && writeKey.length() > 0; }
+  bool isComplete() const { return ssid.length() > 0 && writeKey.length() == 16; }
 };
 
 // Reads saved settings from NVS. Returns config.isComplete().

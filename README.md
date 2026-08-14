@@ -86,6 +86,9 @@ needs the separate "SparkFun BME280" library from the Library Manager.
 - The setup portal's access point is open (no password) and only runs
   while unconfigured/disconnected -- get a write key first (see the
   [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
+- The write key must be exactly 16 characters (`location.WriteKey` is
+  `varchar(16)`) -- the portal enforces this both client-side (input
+  `minlength`/`maxlength`) and server-side in `handleSave()`.
 
 ## License
 
