@@ -1,0 +1,33 @@
+#pragma once
+
+#include <Arduino.h>
+
+#include <vector>
+
+#include "SensorNodeConfig.h"
+
+class SensorNode {
+ public:
+  // Loads saved settings and connects to Wi-Fi. If nothing is saved,
+  // or the connection attempt times out, this instead runs the AP
+  // setup portal and never returns -- the device restarts once the
+  // user submits valid settings, then reconnects on the next boot.
+  void begin(unsigned long connectTimeoutMs = 15000);
+
+  // Erases saved settings so the next begin() call falls back to the
+  // setup portal. Call before begin(), e.g. when a button is held at
+  // boot -- see examples/BasicNode.
+  void resetConfig();
+
+  // Posts one reading per channel, addressed starting at this node's
+  // configured device id (channel deviceId*256 + index). A NAN entry
+  // is omitted from the request, matching log.php's "blank value"
+  // skip semantics. Returns true once the server confirms the data
+  // was logged.
+  bool log(const std::vector<float> &values, int decimalPlaces = 2);
+
+  const SensorNodeConfig &config() const { return config_; }
+
+ private:
+  SensorNodeConfig config_;
+};
