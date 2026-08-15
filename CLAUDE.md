@@ -7,17 +7,30 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 
 ## Architecture
 
-- `SensorNodeConfig` (`src/SensorNodeConfig.*`) -- `ssid`/`password`/
+- `SensorNodeConfig` (`src/SensorNodeConfig.*`) -- `ssids[]`/
+  `passwords[]` (fixed-size arrays, `kMaxNetworks` = 3, most-recently-
+  added first, NVS keys `ssid0`/`password0`/`ssid1`/... ) plus
   `nodeName`/`deviceId`/`writeKey` persisted via `Preferences` (NVS).
-  Server host is not part of the config; it's a hardcoded constant in
-  `SensorNode.cpp` (`kServer`) since one node only ever reports to
-  larsi.org -- the "different X per node" axis here is sensors wired
-  to a sketch, not backend servers.
+  Multi-network support (2026-08-15) replaced single `ssid`/`password`
+  fields -- a deliberate breaking change to the NVS layout, since a
+  node that's already lost its saved network just goes through the
+  portal once more, no migration needed. Server host is not part of
+  the config; it's a hardcoded constant in `SensorNode.cpp` (`kServer`)
+  since one node only ever reports to larsi.org -- the "different X per
+  node" axis here is sensors wired to a sketch, not backend servers.
 - `SensorNodePortal` (`src/SensorNodePortal.*`) -- open AP + captive
-  portal (`WebServer` + `DNSServer` catch-all) used only while
-  unconfigured or disconnected. `runSensorNodeSetupPortal()` blocks
-  forever and restarts the device on successful submit; it's not
-  meant to run alongside normal operation.
+  portal (`WebServer` + `DNSServer` catch-all) used only while none of
+  the known networks connect. `runSensorNodeSetupPortal()` blocks
+  forever and restarts the device on successful submit; it's not meant
+  to run alongside normal operation. `buildFormPage()` pre-fills
+  node name/device id/write key from the existing config (loaded fresh
+  each render) so the common case -- the node moved to a new location,
+  every *known* network is by definition out of range -- only requires
+  adding one new network. `handleSave()` starts from the existing
+  config too (not a blank one) and calls `addOrUpdateNetwork()`, which
+  shifts the new network to the front and drops the oldest if all
+  `kMaxNetworks` slots are full, or updates in place if the submitted
+  SSID matches an already-known one (password changed, most likely).
 - `SensorNode` (`src/SensorNode.*`) -- the class sketches use.
   `begin()` tries the saved config, falls back to the portal, then
   resolves the server and syncs the clock via NTP (see Networking

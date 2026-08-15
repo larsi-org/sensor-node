@@ -9,11 +9,14 @@ const char *kNamespace = "sensornode";
 bool loadSensorNodeConfig(SensorNodeConfig &config) {
   Preferences prefs;
   prefs.begin(kNamespace, true);
-  config.ssid = prefs.getString("ssid", "");
-  config.password = prefs.getString("password", "");
+  for (uint8_t i = 0; i < SensorNodeConfig::kMaxNetworks; i++) {
+    config.ssids[i] = prefs.getString(("ssid" + String(i)).c_str(), "");
+    config.passwords[i] = prefs.getString(("password" + String(i)).c_str(), "");
+  }
   config.nodeName = prefs.getString("nodeName", "");
   config.deviceId = prefs.getUChar("deviceId", 0);
   config.writeKey = prefs.getString("writeKey", "");
+  config.logIntervalMinutes = prefs.getUChar("logInterval", 3);
   prefs.end();
   return config.isComplete();
 }
@@ -21,11 +24,14 @@ bool loadSensorNodeConfig(SensorNodeConfig &config) {
 void saveSensorNodeConfig(const SensorNodeConfig &config) {
   Preferences prefs;
   prefs.begin(kNamespace, false);
-  prefs.putString("ssid", config.ssid);
-  prefs.putString("password", config.password);
+  for (uint8_t i = 0; i < SensorNodeConfig::kMaxNetworks; i++) {
+    prefs.putString(("ssid" + String(i)).c_str(), config.ssids[i]);
+    prefs.putString(("password" + String(i)).c_str(), config.passwords[i]);
+  }
   prefs.putString("nodeName", config.nodeName);
   prefs.putUChar("deviceId", config.deviceId);
   prefs.putString("writeKey", config.writeKey);
+  prefs.putUChar("logInterval", config.logIntervalMinutes);
   prefs.end();
 }
 

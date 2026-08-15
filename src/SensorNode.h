@@ -8,8 +8,11 @@
 
 class SensorNode {
  public:
-  // Loads saved settings and connects to Wi-Fi. If nothing is saved,
-  // or the connection attempt times out, this instead runs the AP
+  // Loads saved settings and tries each known network in turn
+  // (SensorNodeConfig::kMaxNetworks, most-recently-added first) --
+  // connectTimeoutMs applies per network, so the worst-case time
+  // before falling back is that times the number of known networks.
+  // If nothing is saved, or none connect, this instead runs the AP
   // setup portal and never returns -- the device restarts once the
   // user submits valid settings, then reconnects on the next boot.
   void begin(unsigned long connectTimeoutMs = 15000);

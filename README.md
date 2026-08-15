@@ -4,12 +4,21 @@ An Arduino library for ESP32-based sensor nodes that report to
 [larsi.org/log.php](https://larsi.org/sensors/sensor-node.php). Handles
 Wi-Fi provisioning and posting readings; bring your own sensors.
 
-If the node can't connect to Wi-Fi (nothing saved yet, or a bad
-password/out-of-range network), it opens an access point with a
-captive setup portal: pick a network from a live scan, enter the
-password, and set a node name, device id (0-255), and write key. It
-saves the settings to flash (NVS) and reboots, then connects normally
-on every later boot.
+If the node can't connect to any of its known networks (nothing saved
+yet, or none in range), it opens an access point with a captive setup
+portal: pick a network from a live scan, enter the password, and set a
+node name, device id (0-255), write key, and log frequency (1, 2, 3,
+5, 10, 15, 20, 30, or 60 minutes -- default 3). It saves the settings
+to flash (NVS) and reboots, then connects normally on every later
+boot.
+
+Up to `SensorNodeConfig::kMaxNetworks` (3) networks are remembered,
+most-recently-added first -- a node that moves between a handful of
+locations (e.g. two homes) reconnects immediately without
+reprovisioning every time it moves back. `begin()` tries each in turn;
+only once none of them connect does the portal come up, pre-filled
+with the existing node name/device id/write key so moving to a new
+location only means adding one new network.
 
 The device id is what makes a single write key usable for more than
 one physical node without their channel numbers colliding -- each
@@ -47,7 +56,7 @@ void setup() {
 void loop() {
   float temperatureC = readTemperature();
   node.log({temperatureC});
-  delay(60000);
+  delay(node.config().logIntervalMinutes * 60UL * 1000);  // set via the portal
 }
 ```
 
@@ -71,8 +80,10 @@ needs the separate "SparkFun BME280" library from the Library Manager.
   `log.php` treats as "skip this channel" rather than logging a zero.
   Returns whether the server confirmed the data was logged.
 - `const SensorNodeConfig &config() const` -- read-only access to the
-  loaded settings (`ssid`, `password`, `nodeName`, `deviceId`,
-  `writeKey`).
+  loaded settings (`ssids`/`passwords` arrays, `nodeName`, `deviceId`,
+  `writeKey`, `logIntervalMinutes`). Sketches read `logIntervalMinutes`
+  themselves to compute their own `loop()` delay -- this library
+  doesn't call `log()` on a timer itself.
 
 ## Notes
 

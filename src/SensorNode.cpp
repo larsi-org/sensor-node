@@ -126,14 +126,20 @@ void SensorNode::begin(unsigned long connectTimeoutMs) {
       WiFi.setHostname(config_.nodeName.c_str());
     }
     WiFi.mode(WIFI_STA);
-    WiFi.begin(config_.ssid.c_str(), config_.password.c_str());
 
-    Serial.printf("[SensorNode] Connecting to \"%s\"...\n", config_.ssid.c_str());
-    unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < connectTimeoutMs) {
-      delay(250);
+    connected = false;
+    for (uint8_t i = 0; i < SensorNodeConfig::kMaxNetworks && !connected; i++) {
+      if (config_.ssids[i].length() == 0) continue;
+
+      Serial.printf("[SensorNode] Connecting to \"%s\"...\n", config_.ssids[i].c_str());
+      WiFi.begin(config_.ssids[i].c_str(), config_.passwords[i].c_str());
+      unsigned long start = millis();
+      while (WiFi.status() != WL_CONNECTED && millis() - start < connectTimeoutMs) {
+        delay(250);
+      }
+      connected = (WiFi.status() == WL_CONNECTED);
+      if (!connected) WiFi.disconnect();
     }
-    connected = (WiFi.status() == WL_CONNECTED);
   }
 
   if (!connected) {

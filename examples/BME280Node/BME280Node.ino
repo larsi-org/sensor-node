@@ -8,7 +8,8 @@
 // On first boot (or whenever it can't connect), the node opens an
 // access point named "SensorNode-Setup-XXXX" -- join it and visit
 // http://192.168.4.1/ to pick a Wi-Fi network and enter this node's
-// name, device id, and write key. It saves and reboots automatically.
+// name, device id, write key, and log frequency. It saves and reboots
+// automatically.
 
 #include <SensorNode.h>
 #include <SparkFunBME280.h>
@@ -18,9 +19,6 @@
 // button to GND). Change to match your board, or delete the check
 // below entirely if you don't need it.
 const int kResetPin = 9;
-
-// The BME280 shouldn't be polled too often -- give it 3 minutes between reads.
-const unsigned long kReadIntervalMs = 3UL * 60 * 1000;
 
 SensorNode node;
 BME280 bme;
@@ -52,5 +50,5 @@ void loop() {
   // channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure hPa
   node.log({tempC, dewPointTempC, humidityPct, pressureHpa});
 
-  delay(kReadIntervalMs);
+  delay(node.config().logIntervalMinutes * 60UL * 1000);
 }

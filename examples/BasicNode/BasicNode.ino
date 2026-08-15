@@ -5,7 +5,8 @@
 // On first boot (or whenever it can't connect), the node opens an
 // access point named "SensorNode-Setup-XXXX" -- join it and visit
 // http://192.168.4.1/ to pick a Wi-Fi network and enter this node's
-// name, device id, and write key. It saves and reboots automatically.
+// name, device id, write key, and log frequency. It saves and reboots
+// automatically.
 
 #include <SensorNode.h>
 
@@ -34,5 +35,5 @@ void loop() {
   float humidityPct = NAN;    // NAN skips this channel entirely
 
   node.log({temperatureC, humidityPct});
-  delay(60000);
+  delay(node.config().logIntervalMinutes * 60UL * 1000);
 }
