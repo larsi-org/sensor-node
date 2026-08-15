@@ -86,9 +86,13 @@ needs the separate "SparkFun BME280" library from the Library Manager.
 - The setup portal's access point is open (no password) and only runs
   while unconfigured/disconnected -- get a write key first (see the
   [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
-- The write key must be exactly 16 characters (`location.WriteKey` is
-  `varchar(16)`) -- the portal enforces this both client-side (input
-  `minlength`/`maxlength`) and server-side in `handleSave()`.
+- The write key must match `larsi.org`'s own generator (`id.php`'s
+  `generateID(16)`): 16 characters, starting with a letter, the rest
+  letters/digits/`-`/`_`. The portal enforces this shape both
+  client-side (input `pattern`) and server-side (`isValidWriteKey()`
+  in `handleSave()`), not just the length -- a wrong-shape key would
+  otherwise only fail once talking to the real server, with a generic
+  "Key not found".
 - The device clock is set via NTP (`WiFiUDP`, Cloudflare's and
   Google's public servers) before `log()`'s first HTTPS connection --
   needed for TLS certificate date validation to pass.

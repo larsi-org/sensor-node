@@ -5,6 +5,7 @@
 #include <WiFi.h>
 
 #include <algorithm>
+#include <cctype>
 #include <utility>
 #include <vector>
 
@@ -31,6 +32,22 @@ String htmlEscape(const String &in) {
     }
   }
   return out;
+}
+
+// Matches the shape of larsi.org's own key generator (id.php's
+// generateID(16)): exactly 16 chars, first a letter, the rest base64url
+// (A-Z, a-z, 0-9, -, _). Not just a length check -- a key that's the
+// right length but wrong shape (e.g. copy-pasted with a stray space,
+// or missing the leading-letter constraint) would otherwise only fail
+// once talking to the real server, with a generic "Key not found".
+bool isValidWriteKey(const String &key) {
+  if (key.length() != 16) return false;
+  if (!isalpha((unsigned char)key[0])) return false;
+  for (size_t i = 0; i < key.length(); i++) {
+    char c = key[i];
+    if (!isalnum((unsigned char)c) && c != '-' && c != '_') return false;
+  }
+  return true;
 }
 
 // Scanned networks, strongest signal first, de-duplicated by SSID (an
@@ -87,7 +104,10 @@ String buildFormPage() {
   page += "<label>Wi-Fi Password</label><input type=\"password\" name=\"password\">";
   page += "<label>Node Name</label><input type=\"text\" name=\"nodeName\" maxlength=\"32\">";
   page += "<label>Device ID (0-255)</label><input type=\"number\" name=\"deviceId\" min=\"0\" max=\"255\" value=\"0\" required>";
-  page += "<label>Write Key (16 characters)</label><input type=\"text\" name=\"writeKey\" minlength=\"16\" maxlength=\"16\" required>";
+  page += "<label>Write Key (16 characters, starts with a letter)</label>";
+  page += "<input type=\"text\" name=\"writeKey\" minlength=\"16\" maxlength=\"16\" required "
+          "pattern=\"[A-Za-z][A-Za-z0-9_-]{15}\" "
+          "title=\"16 characters: a letter, then letters/digits/-/_\">";
   page += "<button type=\"submit\">Save &amp; Reboot</button>";
   page += "</form></body></html>";
   return page;
@@ -107,8 +127,10 @@ void handleSave() {
     server.send(400, "text/html", "<p>Wi-Fi network is required. <a href=\"/\">Back</a></p>");
     return;
   }
-  if (config.writeKey.length() != 16) {
-    server.send(400, "text/html", "<p>Write key must be exactly 16 characters. <a href=\"/\">Back</a></p>");
+  if (!isValidWriteKey(config.writeKey)) {
+    server.send(400, "text/html",
+                "<p>Write key must be 16 characters: a letter, then letters/digits/-/_ only. "
+                "<a href=\"/\">Back</a></p>");
     return;
   }
 
