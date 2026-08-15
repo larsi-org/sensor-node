@@ -88,9 +88,12 @@ needs the separate "SparkFun BME280" library from the Library Manager.
   [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
 - The write key must match `larsi.org`'s own generator (`id.php`'s
   `generateID(16)`): 16 characters, starting with a letter, the rest
-  letters/digits/`-`/`_`. The portal enforces this shape both
-  client-side (input `pattern`) and server-side (`isValidWriteKey()`
-  in `handleSave()`), not just the length -- a wrong-shape key would
+  letters/digits/`-`/`_`. `handleSave()` trims the submitted value
+  first (accidental leading/trailing whitespace from copy-paste is
+  common) and only then checks it against that shape, both
+  client-side (input `pattern`, which tolerates surrounding whitespace
+  so a padded paste doesn't just fail to submit) and server-side
+  (`isValidWriteKey()`) -- not just the length. A wrong-shape key would
   otherwise only fail once talking to the real server, with a generic
   "Key not found".
 - The device clock is set via NTP (`WiFiUDP`, Cloudflare's and

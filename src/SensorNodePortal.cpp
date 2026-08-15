@@ -105,9 +105,16 @@ String buildFormPage() {
   page += "<label>Node Name</label><input type=\"text\" name=\"nodeName\" maxlength=\"32\">";
   page += "<label>Device ID (0-255)</label><input type=\"number\" name=\"deviceId\" min=\"0\" max=\"255\" value=\"0\" required>";
   page += "<label>Write Key (16 characters, starts with a letter)</label>";
-  page += "<input type=\"text\" name=\"writeKey\" minlength=\"16\" maxlength=\"16\" required "
-          "pattern=\"[A-Za-z][A-Za-z0-9_-]{15}\" "
-          "title=\"16 characters: a letter, then letters/digits/-/_\">";
+  // maxlength deliberately generous (not 16): a pasted key with
+  // accidental leading/trailing whitespace is longer than 16 chars
+  // until trimmed server-side (handleSave()) -- a strict maxlength="16"
+  // would silently truncate the paste first and clip real key
+  // characters instead of the whitespace. The pattern likewise allows
+  // surrounding whitespace so a legitimate padded paste still passes
+  // client-side validation instead of just failing to submit.
+  page += "<input type=\"text\" name=\"writeKey\" maxlength=\"32\" required "
+          "pattern=\"\\s*[A-Za-z][A-Za-z0-9_-]{15}\\s*\" "
+          "title=\"16 characters: a letter, then letters/digits/-/_ (surrounding spaces OK)\">";
   page += "<button type=\"submit\">Save &amp; Reboot</button>";
   page += "</form></body></html>";
   return page;
@@ -122,6 +129,7 @@ void handleSave() {
   config.nodeName = server.arg("nodeName");
   config.deviceId = (uint8_t)constrain(server.arg("deviceId").toInt(), 0, 255);
   config.writeKey = server.arg("writeKey");
+  config.writeKey.trim();  // strip accidental leading/trailing whitespace from copy-paste
 
   if (config.ssid.length() == 0) {
     server.send(400, "text/html", "<p>Wi-Fi network is required. <a href=\"/\">Back</a></p>");
