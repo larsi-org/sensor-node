@@ -32,11 +32,8 @@ class SensorNode {
   const SensorNodeConfig &config() const { return config_; }
 
  private:
-  // Resolves and caches the server's IP; re-resolves on demand if
-  // never successful yet (e.g. DNS wasn't up at boot). Cached rather
-  // than re-resolved every call so a still-flaky network doesn't hit
-  // the DNS resolution path -- historically the least reliable part of
-  // this stack -- any more often than necessary.
+  // Resolves and caches the server's IP; re-resolves on demand only if
+  // never successful yet (e.g. DNS wasn't up at boot).
   bool resolveServerIp();
 
   SensorNodeConfig config_;

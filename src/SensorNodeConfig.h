@@ -6,10 +6,7 @@ struct SensorNodeConfig {
   // A small history of known networks, most-recently-added first, so
   // a node that moves between a handful of locations (e.g. home and a
   // second home) reconnects immediately without reprovisioning every
-  // time it moves back. Unused slots have an empty ssid. Breaking
-  // change from the single ssid/password fields this replaced --
-  // existing saved config just won't be found under the new NVS keys,
-  // sending begin() to the portal for a one-time re-setup.
+  // time it moves back. Unused slots have an empty ssid.
   static const uint8_t kMaxNetworks = 3;
   String ssids[kMaxNetworks];
   String passwords[kMaxNetworks];

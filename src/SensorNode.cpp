@@ -49,13 +49,11 @@ LPAvTK33sefOT6jEm0pUBsV/fdUID+Ic/n4XuKxe9tQWskMJDE32p2u0mYRlynqI
 // Writes an already-built raw HTTP/1.1 request and reads the raw
 // response (status line, headers, body) back as one string.
 //
-// Deliberately not using HTTPClient here: constructing an HTTPClient,
-// calling addHeader(), etc. between connect() and actually writing the
-// request took long enough that the connection was reliably closed out
-// from under us before a single byte went out -- confirmed on hardware
-// by writing the request immediately after connect() instead, which
-// works every time. Writing the request as one pre-built String
-// immediately after connect() keeps that gap as small as possible.
+// Deliberately not HTTPClient: on this hardware, the extra time
+// HTTPClient takes between connect() succeeding and actually writing
+// the request (constructing the object, addHeader(), etc.) was enough
+// for the connection to get closed before a byte went out. Writing a
+// single pre-built request immediately after connect() avoids that gap.
 String rawHttpRequest(WiFiClientSecure &client, const String &request, unsigned long timeoutMs) {
   client.print(request);
   String response;
@@ -67,15 +65,8 @@ String rawHttpRequest(WiFiClientSecure &client, const String &request, unsigned 
 }
 
 // A single NTP query over WiFiUDP, setting the system clock on a valid
-// reply. Confirmed unreliable during an earlier debugging session (no
-// replies ever received, even to a plain LAN target with no DNS
-// involved) -- but that session's root cause turned out to be a dead
-// router, not this code or this board/core; retested cleanly (3/3
-// replies) once the router was fixed. Literal IPs, not hostnames: not
-// working around anything DNS-related (see kServer/resolveServerIp()
-// for that story) -- these are Cloudflare's and Google's long-stable
-// public NTP anycast addresses, a different risk profile than
-// hardcoding a single personal server's IP.
+// reply. Literal IPs, not hostnames -- Cloudflare's and Google's
+// long-stable public NTP anycast addresses, so no DNS lookup needed.
 bool ntpQuery(const char *serverIp, unsigned long timeoutMs) {
   WiFiUDP udp;
   if (!udp.begin(2390)) return false;

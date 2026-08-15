@@ -1,6 +1,6 @@
-// Minimal example: reports two placeholder channels every 60s. Wire
-// your real sensor reads in where readChannel0()/readChannel1() are
-// used below.
+// Minimal example: reports two placeholder channels on the configured
+// log frequency. Replace temperatureC/humidityPct below with real
+// sensor reads.
 //
 // On first boot (or whenever it can't connect), the node opens an
 // access point named "SensorNode-Setup-XXXX" -- join it and visit
