@@ -2,7 +2,7 @@
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <stdlib.h>
+#include <WiFiUdp.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -66,75 +66,53 @@ String rawHttpRequest(WiFiClientSecure &client, const String &request, unsigned 
   return response;
 }
 
-String extractHeader(const String &response, const char *name) {
-  String marker = String("\r\n") + name + ": ";
-  int start = response.indexOf(marker);
-  if (start < 0) return "";
-  start += marker.length();
-  int end = response.indexOf("\r\n", start);
-  return end < 0 ? "" : response.substring(start, end);
-}
+// A single NTP query over WiFiUDP, setting the system clock on a valid
+// reply. Confirmed unreliable during an earlier debugging session (no
+// replies ever received, even to a plain LAN target with no DNS
+// involved) -- but that session's root cause turned out to be a dead
+// router, not this code or this board/core; retested cleanly (3/3
+// replies) once the router was fixed. Literal IPs, not hostnames: not
+// working around anything DNS-related (see kServer/resolveServerIp()
+// for that story) -- these are Cloudflare's and Google's long-stable
+// public NTP anycast addresses, a different risk profile than
+// hardcoding a single personal server's IP.
+bool ntpQuery(const char *serverIp, unsigned long timeoutMs) {
+  WiFiUDP udp;
+  if (!udp.begin(2390)) return false;
 
-// Sets the system clock from an ordinary HTTPS response's Date header,
-// rather than NTP: raw NTP over WiFiUDP reliably never received a
-// reply to anything it sent on this board/core (esp32:esp32, SparkFun
-// ESP32-C6 Thing Plus), confirmed down to a same-subnet LAN round trip
-// with no DNS involved -- while TCP has been reliable. This first
-// request's response isn't authenticated (setInsecure()) -- but
-// nothing secret changes hands here, only a timestamp used so the
-// *next* connection (the real one, in log() below) can validate
-// certificate dates correctly. Worst case for a forged Date response
-// is that log()'s real, fully-validated HTTPS connection fails the
-// same way it would with no clock set at all -- it can't leak the
-// write key or accept a forged larsi.org cert, since that connection
-// still checks the pinned CA and hostname independent of whatever this
-// step set the clock to.
-bool syncTimeFromHttpDate(const IPAddress &serverIp) {
-  WiFiClientSecure client;
-  client.setInsecure();
-  client.setHandshakeTimeout(15);
-  // One retry: ordinary WiFi/AP flakiness is common enough on battery/
-  // roaming-free embedded nodes to be worth one immediate retry before
-  // giving up for this boot.
-  if (!client.connect(serverIp, 443) && !client.connect(serverIp, 443)) {
-    Serial.println("[SensorNode] Time sync: connect failed");
+  uint8_t packet[48] = {0};
+  packet[0] = 0b00100011;  // LI=0, VN=4, Mode=3 (client)
+  if (!udp.beginPacket(serverIp, 123)) {
+    udp.stop();
     return false;
   }
+  udp.write(packet, sizeof(packet));
+  udp.endPacket();
 
-  String request = String("GET / HTTP/1.1\r\nHost: ") + kServer + "\r\nConnection: close\r\n\r\n";
-  String response = rawHttpRequest(client, request, 5000);
-  client.stop();
-
-  String dateHeader = extractHeader(response, "Date");
-  if (dateHeader.length() == 0) {
-    Serial.println("[SensorNode] Time sync: no Date header in response");
-    return false;
+  unsigned long start = millis();
+  while (millis() - start < timeoutMs) {
+    if (udp.parsePacket() >= (int)sizeof(packet)) {
+      udp.read(packet, sizeof(packet));
+      udp.stop();
+      uint32_t secsSince1900 = ((uint32_t)packet[40] << 24) | ((uint32_t)packet[41] << 16) |
+                                ((uint32_t)packet[42] << 8) | (uint32_t)packet[43];
+      const uint32_t kSecondsFrom1900To1970 = 2208988800UL;
+      struct timeval tv = {};
+      tv.tv_sec = secsSince1900 - kSecondsFrom1900To1970;
+      settimeofday(&tv, nullptr);
+      return true;
+    }
+    delay(50);
   }
-
-  struct tm tm = {};
-  // RFC 7231 preferred HTTP-date format, e.g. "Sun, 06 Nov 1994 08:49:37 GMT"
-  if (strptime(dateHeader.c_str(), "%a, %d %b %Y %H:%M:%S %Z", &tm) == nullptr) {
-    Serial.println("[SensorNode] Time sync: couldn't parse Date header");
-    return false;
-  }
-
-  // No timegm() in this toolchain; force UTC so mktime() doesn't apply
-  // a local-time offset -- HTTP dates are always GMT.
-  setenv("TZ", "UTC0", 1);
-  tzset();
-  time_t epoch = mktime(&tm);
-
-  struct timeval tv = {};
-  tv.tv_sec = epoch;
-  settimeofday(&tv, nullptr);
-  return true;
+  udp.stop();
+  return false;
 }
 
 // WiFiClientSecure checks the pinned cert's validity dates against the
 // device clock, which boots near the epoch -- without this, every TLS
 // connection fails since the cert looks "not yet valid" until synced.
-void syncTime(const IPAddress &serverIp) {
-  bool synced = syncTimeFromHttpDate(serverIp);
+void syncTime() {
+  bool synced = ntpQuery("162.159.200.1", 5000) || ntpQuery("216.239.35.0", 5000);
   Serial.printf("[SensorNode] Time sync %s (epoch %ld)\n", synced ? "OK" : "FAILED", (long)time(nullptr));
 }
 
@@ -165,7 +143,7 @@ void SensorNode::begin(unsigned long connectTimeoutMs) {
 
   Serial.printf("[SensorNode] Connected, IP %s\n", WiFi.localIP().toString().c_str());
   resolveServerIp();  // best-effort here; log() retries later if this fails
-  syncTime(serverIp_);
+  syncTime();
 }
 
 void SensorNode::resetConfig() { clearSensorNodeConfig(); }
