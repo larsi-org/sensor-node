@@ -19,10 +19,48 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   forever and restarts the device on successful submit; it's not
   meant to run alongside normal operation.
 - `SensorNode` (`src/SensorNode.*`) -- the class sketches use.
-  `begin()` tries the saved config, falls back to the portal.  `log()`
-  builds the `device|values` form per the wire protocol (see
+  `begin()` tries the saved config, falls back to the portal, then
+  syncs the clock (see Networking below). `log()` builds the
+  `device|values` form per the wire protocol (see
   `https://larsi.org/sensors/sensor-node.php` in the main site repo)
-  and POSTs over `WiFiClientSecure`.
+  and writes it as a raw HTTP/1.1 request directly to a
+  `WiFiClientSecure` -- not via `HTTPClient`, see Networking below.
+
+## Networking (hard-won, 2026-08-15 debugging session)
+
+`SensorNode.cpp` avoids two Arduino-esp32 pieces that both proved
+unreliable on the SparkFun ESP32-C6 Thing Plus, across both esp32 core
+3.0.7 and 3.3.11 (so not the Matter/`CONFIG_LWIP_CHECK_THREAD_SAFETY`
+locking regression -- that was a real, separate bug ruled out along the
+way, see `github.com/espressif/arduino-esp32` issue #10526):
+
+- **DNS.** `WiFi.hostByName()`/hostname-based `connect()` reliably
+  hung or crashed. Worked around by hardcoding `kServerIp` and passing
+  the hostname separately to `connect()` for TLS SNI/verification and
+  the HTTP `Host` header, never letting the device resolve DNS itself.
+- **NTP.** Raw NTP over `WiFiUDP` sent successfully (per `endPacket()`)
+  but never once received a reply, even to a plain LAN target with no
+  DNS involved -- confirmed the protocol itself was fine (a plain
+  Python UDP client got instant replies from the same servers on the
+  same network). Root cause never fully identified; worked around
+  entirely by reading the clock off an HTTPS response's `Date` header
+  instead (`syncTimeFromHttpDate()`), since TCP was reliable.
+- **`HTTPClient`.** Even with a good TCP/TLS connection, using
+  `HTTPClient` (constructing the object, `addHeader()`, etc.) between
+  `connect()` succeeding and actually writing the request took long
+  enough that the connection was reliably closed before a single byte
+  went out. Fixed by dropping `HTTPClient` and writing a raw prebuilt
+  HTTP/1.1 request straight to the `WiFiClientSecure` immediately after
+  `connect()` returns (`rawHttpRequest()`) -- confirmed reliable across
+  many repeated resets on both core versions.
+- **The actual "first request always fails" pattern turned out to be a
+  dead router**, not code: a second device on the same 2.4GHz network
+  was also silently offline, and resetting the router fixed both.
+  Everything above except the `HTTPClient` timing-gap fix was
+  investigated *before* that reset, chasing what looked like a
+  code-level bug -- worth remembering that a string of "first attempt
+  after boot fails" symptoms can be the AP's fault, not the firmware's.
+  Test that early if it comes up again.
 
 ## TLS
 

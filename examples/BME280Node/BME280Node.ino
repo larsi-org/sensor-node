@@ -25,15 +25,6 @@ const unsigned long kReadIntervalMs = 3UL * 60 * 1000;
 SensorNode node;
 BME280 bme;
 
-float dewPointC(float tempC, float humidityPct) {
-  // http://en.wikipedia.org/wiki/Dew_point
-  float a = 17.271;
-  float b = 237.7;
-  float gamma = log(humidityPct / 100) + a / (b / tempC + 1);
-  float dewPoint = b / (a / gamma - 1);
-  return dewPoint;
-}
-
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -56,7 +47,7 @@ void loop() {
   float tempC = bme.readTempC();
   float humidityPct = bme.readFloatHumidity();
   float pressureHpa = bme.readFloatPressure() / 100.0;
-  float dewPointTempC = dewPointC(tempC, humidityPct);
+  float dewPointTempC = bme.dewPointC();
 
   // channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure hPa
   node.log({tempC, dewPointTempC, humidityPct, pressureHpa});

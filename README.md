@@ -29,8 +29,8 @@ git clone https://github.com/larsi-org/sensor-node.git ~/Arduino/libraries/senso
 
 Restart the Arduino IDE and `#include <SensorNode.h>` becomes
 available. No extra dependencies -- everything used (`WiFi`,
-`WebServer`, `DNSServer`, `Preferences`, `HTTPClient`,
-`WiFiClientSecure`) ships with the ESP32 Arduino core.
+`WebServer`, `DNSServer`, `Preferences`, `WiFiClientSecure`) ships with
+the ESP32 Arduino core.
 
 ## Quick start
 
@@ -89,6 +89,15 @@ needs the separate "SparkFun BME280" library from the Library Manager.
 - The write key must be exactly 16 characters (`location.WriteKey` is
   `varchar(16)`) -- the portal enforces this both client-side (input
   `minlength`/`maxlength`) and server-side in `handleSave()`.
+- The device clock is set from an HTTPS response's `Date` header, not
+  NTP -- raw NTP over `WiFiUDP` never received a reply in testing, even
+  to a plain LAN target with no DNS involved. `log()` and the time-sync
+  request both write a raw HTTP/1.1 request directly to the socket
+  immediately after connecting rather than going through `HTTPClient`
+  -- the gap between `connect()` succeeding and `HTTPClient` actually
+  writing a request (constructing the object, `addHeader()`, etc.) was
+  long enough that the connection was reliably closed before a single
+  byte went out. See `src/SensorNode.cpp` for the details.
 
 ## License
 
