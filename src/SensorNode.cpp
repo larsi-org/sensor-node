@@ -12,18 +12,6 @@ namespace {
 
 const char *kServer = "larsi.org";
 
-// Hardcoded rather than resolved at runtime: WiFi.hostByName() (used
-// for any hostname-based connect()) reliably hung or crashed on this
-// board/core during development, tracing back to
-// NetworkManager::hostByName() not taking the TCPIP core lock lwIP
-// requires (github.com/espressif/arduino-esp32 issue #10526). Update
-// this if larsi.org's IP ever changes (symptom: connect() fails) --
-// check with `dig +short larsi.org` or `getent hosts larsi.org`. The
-// hostname is still passed to connect() below for TLS SNI/certificate
-// verification and the HTTP Host header, so this doesn't weaken either
-// of those checks.
-const IPAddress kServerIp(107, 180, 118, 157);
-
 // "Go Daddy Root Certificate Authority - G2", self-signed, valid to
 // 2037-12-31 -- the root larsi.org's chain currently validates against
 // (verified 2026-08-13: `openssl s_client -connect larsi.org:443
@@ -101,14 +89,14 @@ String extractHeader(const String &response, const char *name) {
 // write key or accept a forged larsi.org cert, since that connection
 // still checks the pinned CA and hostname independent of whatever this
 // step set the clock to.
-bool syncTimeFromHttpDate() {
+bool syncTimeFromHttpDate(const IPAddress &serverIp) {
   WiFiClientSecure client;
   client.setInsecure();
   client.setHandshakeTimeout(15);
   // One retry: ordinary WiFi/AP flakiness is common enough on battery/
   // roaming-free embedded nodes to be worth one immediate retry before
   // giving up for this boot.
-  if (!client.connect(kServerIp, 443) && !client.connect(kServerIp, 443)) {
+  if (!client.connect(serverIp, 443) && !client.connect(serverIp, 443)) {
     Serial.println("[SensorNode] Time sync: connect failed");
     return false;
   }
@@ -145,8 +133,8 @@ bool syncTimeFromHttpDate() {
 // WiFiClientSecure checks the pinned cert's validity dates against the
 // device clock, which boots near the epoch -- without this, every TLS
 // connection fails since the cert looks "not yet valid" until synced.
-void syncTime() {
-  bool synced = syncTimeFromHttpDate();
+void syncTime(const IPAddress &serverIp) {
+  bool synced = syncTimeFromHttpDate(serverIp);
   Serial.printf("[SensorNode] Time sync %s (epoch %ld)\n", synced ? "OK" : "FAILED", (long)time(nullptr));
 }
 
@@ -176,13 +164,27 @@ void SensorNode::begin(unsigned long connectTimeoutMs) {
   }
 
   Serial.printf("[SensorNode] Connected, IP %s\n", WiFi.localIP().toString().c_str());
-  syncTime();
+  resolveServerIp();  // best-effort here; log() retries later if this fails
+  syncTime(serverIp_);
 }
 
 void SensorNode::resetConfig() { clearSensorNodeConfig(); }
 
+bool SensorNode::resolveServerIp() {
+  if (serverIp_ != IPAddress()) return true;
+  Serial.printf("[SensorNode] Resolving %s...\n", kServer);
+  if (!WiFi.hostByName(kServer, serverIp_)) {
+    Serial.printf("[SensorNode] Could not resolve %s\n", kServer);
+    serverIp_ = IPAddress();
+    return false;
+  }
+  Serial.printf("[SensorNode] Resolved %s -> %s\n", kServer, serverIp_.toString().c_str());
+  return true;
+}
+
 bool SensorNode::log(const std::vector<float> &values, int decimalPlaces) {
   if (WiFi.status() != WL_CONNECTED) return false;
+  if (!resolveServerIp()) return false;
 
   String data = String(config_.deviceId) + "|";
   for (size_t i = 0; i < values.size(); i++) {
@@ -192,8 +194,8 @@ bool SensorNode::log(const std::vector<float> &values, int decimalPlaces) {
 
   WiFiClientSecure client;
   client.setHandshakeTimeout(15);  // seconds; default is 120
-  if (!client.connect(kServerIp, 443, kServer, kServerRootCA, nullptr, nullptr) &&
-      !client.connect(kServerIp, 443, kServer, kServerRootCA, nullptr, nullptr)) {
+  if (!client.connect(serverIp_, 443, kServer, kServerRootCA, nullptr, nullptr) &&
+      !client.connect(serverIp_, 443, kServer, kServerRootCA, nullptr, nullptr)) {
     char err[128];
     client.lastError(err, sizeof(err));
     Serial.printf("[SensorNode] TLS connect failed: %s\n", err);

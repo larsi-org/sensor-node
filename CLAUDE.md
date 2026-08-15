@@ -34,10 +34,19 @@ unreliable on the SparkFun ESP32-C6 Thing Plus, across both esp32 core
 locking regression -- that was a real, separate bug ruled out along the
 way, see `github.com/espressif/arduino-esp32` issue #10526):
 
-- **DNS.** `WiFi.hostByName()`/hostname-based `connect()` reliably
-  hung or crashed. Worked around by hardcoding `kServerIp` and passing
-  the hostname separately to `connect()` for TLS SNI/verification and
-  the HTTP `Host` header, never letting the device resolve DNS itself.
+- **DNS.** `WiFi.hostByName()`/hostname-based `connect()` reliably hung
+  or crashed while the router (see below) was in its bad state --
+  traced to `NetworkManager::hostByName()` not taking the TCPIP core
+  lock lwIP requires (`arduino-esp32` issue #10526), a real bug, but
+  one that in practice didn't trigger once the network was healthy.
+  Re-tested after the router fix (3 clean resolves in a row) and
+  switched back to real DNS: `SensorNode::resolveServerIp()` resolves
+  `kServer` once via `WiFi.hostByName()` and caches the result in
+  `serverIp_`, re-resolving on demand only if a resolve ever fails --
+  deliberately not re-resolving every `log()` call, to keep exposure to
+  that still-latent lock bug low even though it's not currently firing.
+  If DNS starts failing/crashing again, that's the first thing to
+  revert (hardcode `kServerIp`, pass `kServer` only for TLS SNI/Host).
 - **NTP.** Raw NTP over `WiFiUDP` sent successfully (per `endPacket()`)
   but never once received a reply, even to a plain LAN target with no
   DNS involved -- confirmed the protocol itself was fine (a plain
