@@ -24,13 +24,13 @@
 // Hold this pin low at boot to reach the setup portal on demand (e.g.
 // wire a button, or briefly jumper it to GND) -- short hold opens it
 // pre-filled, long hold wipes first (see checkPortalButton()'s default
-// wipeHoldMs). GPIO14 avoids this board's reserved pins: 4/5/8/9/15
+// wipeHoldMs). GPIO0 avoids this board's reserved pins: 4/5/8/9/15
 // are chip strapping pins (9 is also the onboard BOOT button -- see
 // CLAUDE.md), 12/13 are USB D-/D+ (same USB-JTAG used for flashing/
 // serial), 6/7/11/18-23 are tied to onboard Qwiic/battery-gauge/
 // microSD/RGB LED. Change to match your board's free pins, or delete
 // the check below entirely if you don't need it.
-const int kResetPin = 14;
+const int kResetPin = 0;
 
 // Matches the log() call below -- channel 0: temperature C, 1: dew
 // point C, 2: humidity %, 3: pressure hPa. Sent once at boot;

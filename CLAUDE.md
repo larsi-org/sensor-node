@@ -64,19 +64,23 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   holding the pin while the device is already looping does nothing;
   it has to be held through an actual reset (button press or power
   cycle) so `setup()` re-reads it. `kResetPin` in both examples is
-  GPIO14, not arbitrary: on the SparkFun ESP32-C6 Thing Plus, GPIO9 is
+  GPIO0, not arbitrary: on the SparkFun ESP32-C6 Thing Plus, GPIO9 is
   the chip's boot-mode strapping pin *and* the board's onboard BOOT
   button -- holding it through a reset sends the chip into USB
   download/bootloader mode instead of running any application code at
   all (confirmed 2026-08-16: silent serial output, no boot banner,
-  after Lars held BOOT thinking it was this feature's trigger). GPIO4/
-  5/8/9/15 are chip strapping pins, GPIO12/13 are USB D-/D+ (the same
+  after Lars held BOOT thinking it was this feature's trigger). Per
+  Espressif's own ESP-IDF docs (verified directly -- a first search
+  wrongly suggested GPIO0 was also a strapping pin on this chip, which
+  is only true on classic ESP32, not C6/S3/C3), GPIO4/5/8/9/15 are the
+  ESP32-C6's only strapping pins. GPIO12/13 are USB D-/D+ (the same
   USB-JTAG connection used for flashing/serial), GPIO6/7/11/18-23 are
   tied to this board's onboard Qwiic/battery-gauge/microSD/RGB LED --
   all reserved, avoid them for any new digitalRead()/pinMode() use on
-  this board. GPIO14 is clear of all of that. A jumper wire straight to
-  GND works fine for testing -- `INPUT_PULLUP` is already set in code,
-  no external resistor needed.
+  this board. GPIO0 is clear of all of that and happens to sit right
+  next to a GND pin on the physical header, convenient for a jumper
+  wire straight across -- `INPUT_PULLUP` is already set in code, no
+  external resistor needed.
 
 ## Networking
 
