@@ -46,14 +46,20 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   runs of anything else collapsed to one `-`) -- `deviceName` itself
   stays free-text and unsanitized everywhere else (`provision()`'s
   `name=`, reports), since `WiFi.setHostname()` is the only consumer
-  that actually needs the restricted shape. `openPortal()` is a thin wrapper
-  around `runSensorNodeSetupPortal()` -- an on-demand way to reach the
-  portal (pre-filled, nothing erased) without going through
-  `resetConfig()`'s full wipe first. Both examples wire this to the
-  same reset-pin button as `resetConfig()`, distinguished by hold
-  duration (`kWipeHoldMs`) rather than a second pin -- short hold
-  opens the portal as-is, long hold wipes first, same pattern as a
-  router's reset button.
+  that actually needs the restricted shape. `openPortal()` is a thin
+  wrapper around `runSensorNodeSetupPortal()` -- an on-demand way to
+  reach the portal (pre-filled, nothing erased) without going through
+  `resetConfig()`'s full wipe first. `checkPortalButton(pin,
+  wipeHoldMs)` is what both examples actually call at the top of
+  `setup()`: reads `pin` (`INPUT_PULLUP`) and picks between the two
+  by hold duration -- short calls `openPortal()`, past `wipeHoldMs`
+  calls `resetConfig()` instead (letting the `begin()` right after
+  fall into the portal blank) -- same reset-pin button doing both
+  jobs, no second pin needed, same pattern as a router's reset button.
+  This one method is the only thing extracted into the library so far
+  from what was originally per-example boilerplate; `Serial.begin()`/
+  `delay(1000)` and the `provision()` call are left in each sketch on
+  purpose (baud rate and channel list are legitimately per-sketch).
 
 ## Networking
 

@@ -64,9 +64,10 @@ void loop() {
 ```
 
 See `examples/BasicNode` for a fuller version, including a pin you can
-hold low at boot to force reconfiguration, or `examples/BME280Node`
-for a real sensor (temperature, dew point, humidity, pressure) --
-needs the separate "SparkFun BME280" library from the Library Manager.
+hold at boot to reach the setup portal on demand, or `examples/
+BME280Node` for a real sensor (temperature, dew point, humidity,
+pressure) -- needs the separate "SparkFun BME280" library from the
+Library Manager.
 
 ## API
 
@@ -81,8 +82,15 @@ needs the separate "SparkFun BME280" library from the Library Manager.
   erasing anything; pre-filled from whatever's already saved, same as
   `begin()`'s automatic fallback when no known network connects. Never
   returns. Useful as a lighter on-demand trigger than `resetConfig()`
-  when you just want to tweak one field (e.g. the device name) --
-  see `examples/BasicNode`'s short-hold-vs-long-hold button logic.
+  when you just want to tweak one field (e.g. the device name).
+- `void checkPortalButton(uint8_t pin, unsigned long wipeHoldMs = 5000)`
+  -- sets `pin` to `INPUT_PULLUP` and, if it's held low, blocks
+  measuring how long: past `wipeHoldMs` calls `resetConfig()` (so the
+  `begin()` call after this returns comes up blank), less than that
+  calls `openPortal()` directly (pre-filled, never returns). A no-op
+  if `pin` reads high. Call once at the top of `setup()`, before
+  `begin()` -- see `examples/BasicNode`/`examples/BME280Node` for the
+  wiring (a button to GND).
 - `bool provision(const std::vector<SensorNodeChannel> &channels)` --
   registers this device and its channels with the server. Each
   `SensorNodeChannel` is `{id, property, unit}` (e.g.

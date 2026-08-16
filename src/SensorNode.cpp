@@ -206,6 +206,23 @@ void SensorNode::resetConfig() { clearSensorNodeConfig(); }
 
 void SensorNode::openPortal() { runSensorNodeSetupPortal(); }
 
+void SensorNode::checkPortalButton(uint8_t pin, unsigned long wipeHoldMs) {
+  pinMode(pin, INPUT_PULLUP);
+  if (digitalRead(pin) != LOW) return;
+
+  unsigned long heldStart = millis();
+  while (digitalRead(pin) == LOW && millis() - heldStart < wipeHoldMs) {
+    delay(50);
+  }
+  if (millis() - heldStart >= wipeHoldMs) {
+    Serial.println("[SensorNode] Portal button held long -- wiping saved config.");
+    resetConfig();  // begin() below falls straight into the portal
+  } else {
+    Serial.println("[SensorNode] Portal button held short -- opening portal (nothing erased).");
+    openPortal();  // never returns
+  }
+}
+
 bool SensorNode::resolveServerIp() {
   if (serverIp_ != IPAddress()) return true;
   Serial.printf("[SensorNode] Resolving %s...\n", kServer);

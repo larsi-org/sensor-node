@@ -13,21 +13,20 @@
 //
 // Hold the button at boot to reach the portal on demand: a short hold
 // opens it pre-filled, without erasing anything (for tweaking one
-// field, e.g. the device name); a hold past kWipeHoldMs wipes the
-// saved config first, so the portal comes up blank instead.
+// field, e.g. the device name); a longer hold wipes the saved config
+// first, so the portal comes up blank instead (see
+// checkPortalButton()'s wipeHoldMs).
 
 #include <SensorNode.h>
 #include <SparkFunBME280.h>
 #include <Wire.h>
 
 // Hold this pin low at boot to reach the setup portal on demand (e.g.
-// wire a button to GND). Change to match your board, or delete the
-// check below entirely if you don't need it.
+// wire a button to GND) -- short hold opens it pre-filled, long hold
+// wipes first (see checkPortalButton()'s default wipeHoldMs). Change
+// to match your board, or delete the check below entirely if you
+// don't need it.
 const int kResetPin = 9;
-
-// How long the pin must stay held low to trigger a full wipe instead
-// of just opening the portal (see setup() below).
-const unsigned long kWipeHoldMs = 5000;
 
 // Matches the log() call below -- channel 0: temperature C, 1: dew
 // point C, 2: humidity %, 3: pressure hPa. Sent once at boot;
@@ -47,21 +46,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  pinMode(kResetPin, INPUT_PULLUP);
-  if (digitalRead(kResetPin) == LOW) {
-    unsigned long heldStart = millis();
-    while (digitalRead(kResetPin) == LOW && millis() - heldStart < kWipeHoldMs) {
-      delay(50);
-    }
-    if (millis() - heldStart >= kWipeHoldMs) {
-      Serial.println("Held long -- wiping saved config.");
-      node.resetConfig();  // begin() below falls straight into the portal
-    } else {
-      Serial.println("Held short -- opening portal (nothing erased).");
-      node.openPortal();  // never returns
-    }
-  }
-
+  node.checkPortalButton(kResetPin);
   node.begin();
   node.provision(kChannels);
 

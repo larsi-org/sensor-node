@@ -42,6 +42,16 @@ class SensorNode {
   // user submits.
   void openPortal();
 
+  // Configures pin as INPUT_PULLUP and, if held low at call time,
+  // blocks measuring how long: held past wipeHoldMs calls
+  // resetConfig() (so begin() below falls into the portal blank);
+  // held less than that calls openPortal() directly (pre-filled,
+  // nothing erased) and never returns. A no-op if pin reads high. Call
+  // once at the top of setup(), before begin() -- see examples/
+  // BasicNode and examples/BME280Node for the wiring (a button to
+  // GND).
+  void checkPortalButton(uint8_t pin, unsigned long wipeHoldMs = 5000);
+
   // Posts one reading per channel, addressed starting at this node's
   // configured device id (channel deviceId*256 + index). A NAN entry
   // is omitted from the request, matching log.php's "blank value"
