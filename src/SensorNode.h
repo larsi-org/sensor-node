@@ -33,6 +33,15 @@ class SensorNode {
   // boot -- see examples/BasicNode.
   void resetConfig();
 
+  // Opens the setup portal directly, without erasing anything --
+  // pre-filled from whatever's already saved, same as begin()'s
+  // automatic fallback when no known network connects. Use this for an
+  // on-demand "edit config" trigger (e.g. a short button hold) where
+  // resetConfig()'s full wipe would be overkill -- see
+  // examples/BasicNode. Never returns; the device restarts once the
+  // user submits.
+  void openPortal();
+
   // Posts one reading per channel, addressed starting at this node's
   // configured device id (channel deviceId*256 + index). A NAN entry
   // is omitted from the request, matching log.php's "blank value"

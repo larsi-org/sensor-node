@@ -41,7 +41,14 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   rows that don't exist yet), so sketches call it once every boot right
   after `begin()`, before the first `log()`. Both `log()` and
   `provision()` share a `postToServer(path, body)` helper for the
-  connect/write/read boilerplate.
+  connect/write/read boilerplate. `openPortal()` is a thin wrapper
+  around `runSensorNodeSetupPortal()` -- an on-demand way to reach the
+  portal (pre-filled, nothing erased) without going through
+  `resetConfig()`'s full wipe first. Both examples wire this to the
+  same reset-pin button as `resetConfig()`, distinguished by hold
+  duration (`kWipeHoldMs`) rather than a second pin -- short hold
+  opens the portal as-is, long hold wipes first, same pattern as a
+  router's reset button.
 
 ## Networking
 

@@ -171,6 +171,8 @@ void SensorNode::begin(unsigned long connectTimeoutMs) {
 
 void SensorNode::resetConfig() { clearSensorNodeConfig(); }
 
+void SensorNode::openPortal() { runSensorNodeSetupPortal(); }
+
 bool SensorNode::resolveServerIp() {
   if (serverIp_ != IPAddress()) return true;
   Serial.printf("[SensorNode] Resolving %s...\n", kServer);

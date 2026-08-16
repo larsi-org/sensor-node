@@ -7,13 +7,22 @@
 // http://192.168.4.1/ to pick a Wi-Fi network and enter this device's
 // name, id, write key, and log frequency. It saves and reboots
 // automatically.
+//
+// Hold the button at boot to reach the portal on demand: a short hold
+// opens it pre-filled, without erasing anything (for tweaking one
+// field, e.g. the device name); a hold past kWipeHoldMs wipes the
+// saved config first, so the portal comes up blank instead.
 
 #include <SensorNode.h>
 
-// Hold this pin low at boot to force reconfiguration (e.g. wire a
-// button to GND). Change to match your board, or delete the check
-// below entirely if you don't need it.
+// Hold this pin low at boot to reach the setup portal on demand (e.g.
+// wire a button to GND). Change to match your board, or delete the
+// check below entirely if you don't need it.
 const int kResetPin = 9;
+
+// How long the pin must stay held low to trigger a full wipe instead
+// of just opening the portal (see setup() below).
+const unsigned long kWipeHoldMs = 5000;
 
 // Matches the log() call below. Sent once at boot; provision.php only
 // fills in rows that don't exist yet, so this is safe to leave in
@@ -31,8 +40,17 @@ void setup() {
 
   pinMode(kResetPin, INPUT_PULLUP);
   if (digitalRead(kResetPin) == LOW) {
-    Serial.println("Reset pin held low -- clearing saved config.");
-    node.resetConfig();
+    unsigned long heldStart = millis();
+    while (digitalRead(kResetPin) == LOW && millis() - heldStart < kWipeHoldMs) {
+      delay(50);
+    }
+    if (millis() - heldStart >= kWipeHoldMs) {
+      Serial.println("Held long -- wiping saved config.");
+      node.resetConfig();  // begin() below falls straight into the portal
+    } else {
+      Serial.println("Held short -- opening portal (nothing erased).");
+      node.openPortal();  // never returns
+    }
   }
 
   node.begin();

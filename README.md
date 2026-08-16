@@ -77,6 +77,12 @@ needs the separate "SparkFun BME280" library from the Library Manager.
 - `void resetConfig()` -- erases saved settings. Call before `begin()`
   to force the setup portal on the next call (e.g. gate it behind a
   button held at boot).
+- `void openPortal()` -- opens the setup portal directly, without
+  erasing anything; pre-filled from whatever's already saved, same as
+  `begin()`'s automatic fallback when no known network connects. Never
+  returns. Useful as a lighter on-demand trigger than `resetConfig()`
+  when you just want to tweak one field (e.g. the device name) --
+  see `examples/BasicNode`'s short-hold-vs-long-hold button logic.
 - `bool provision(const std::vector<SensorNodeChannel> &channels)` --
   registers this device and its channels with the server. Each
   `SensorNodeChannel` is `{id, property, unit}` (e.g.
