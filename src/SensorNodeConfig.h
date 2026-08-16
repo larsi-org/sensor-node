@@ -11,7 +11,7 @@ struct SensorNodeConfig {
   String ssids[kMaxNetworks];
   String passwords[kMaxNetworks];
 
-  String nodeName;
+  String deviceName;
   uint8_t deviceId = 0;
   String writeKey;  // location.WriteKey is varchar(16) -- always exactly 16 chars
 

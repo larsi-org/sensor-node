@@ -127,7 +127,7 @@ String buildFormPage() {
   // fields -- this portal only runs because none of the known
   // networks worked (moved to a new location, most likely), so the
   // common case is just adding one new network without retyping the
-  // node name/device id/write key.
+  // device name/id/write key.
   SensorNodeConfig existing;
   loadSensorNodeConfig(existing);
 
@@ -152,7 +152,7 @@ String buildFormPage() {
   page += "button{margin-top:1.5em;padding:.6em 1.2em;font-size:1em}</style></head><body>";
   page += "<h1>Sensor Node Setup</h1>";
   if (existing.ssids[0].length() > 0) {
-    page += "<p>Node name/ID/write key are pre-filled from the existing setup -- pick a new "
+    page += "<p>Device name/ID/write key are pre-filled from the existing setup -- pick a new "
             "Wi-Fi network below. Up to " +
             String(SensorNodeConfig::kMaxNetworks) +
             " networks are remembered (oldest is replaced), so moving back later should "
@@ -161,8 +161,8 @@ String buildFormPage() {
   page += "<form method=\"POST\" action=\"/save\">";
   page += "<label>Wi-Fi Network</label><select name=\"ssid\">" + options + "</select>";
   page += "<label>Wi-Fi Password</label><input type=\"password\" name=\"password\">";
-  page += "<label>Node Name</label><input type=\"text\" name=\"nodeName\" maxlength=\"32\" value=\"" +
-          htmlEscape(existing.nodeName) + "\">";
+  page += "<label>Device Name</label><input type=\"text\" name=\"deviceName\" maxlength=\"32\" value=\"" +
+          htmlEscape(existing.deviceName) + "\">";
   page += "<label>Device ID (0-255)</label><input type=\"number\" name=\"deviceId\" min=\"0\" max=\"255\" value=\"" +
           String(existing.deviceId) + "\" required>";
   page += "<label>Write Key (16 characters, starts with a letter)</label>";
@@ -194,7 +194,7 @@ void handleSave() {
 
   String newSsid = server.arg("ssid");
   String newPassword = server.arg("password");
-  config.nodeName = server.arg("nodeName");
+  config.deviceName = server.arg("deviceName");
   config.deviceId = (uint8_t)constrain(server.arg("deviceId").toInt(), 0, 255);
   config.writeKey = server.arg("writeKey");
   config.writeKey.trim();  // strip accidental leading/trailing whitespace from copy-paste

@@ -64,6 +64,32 @@ String rawHttpRequest(WiFiClientSecure &client, const String &request, unsigned 
   return response;
 }
 
+// Shared by log() and provision(): connects, writes body as a
+// form-encoded POST to path, and returns the raw response (empty
+// string on connect failure).
+String postToServer(IPAddress serverIp, const char *path, const String &body) {
+  WiFiClientSecure client;
+  client.setHandshakeTimeout(15);  // seconds; default is 120
+  if (!client.connect(serverIp, 443, kServer, kServerRootCA, nullptr, nullptr) &&
+      !client.connect(serverIp, 443, kServer, kServerRootCA, nullptr, nullptr)) {
+    char err[128];
+    client.lastError(err, sizeof(err));
+    Serial.printf("[SensorNode] TLS connect failed: %s\n", err);
+    return String();
+  }
+
+  String request = "POST " + String(path) + " HTTP/1.1\r\n";
+  request += String("Host: ") + kServer + "\r\n";
+  request += "Content-Type: application/x-www-form-urlencoded\r\n";
+  request += "Content-Length: " + String(body.length()) + "\r\n";
+  request += "Connection: close\r\n\r\n";
+  request += body;
+
+  String response = rawHttpRequest(client, request, 5000);
+  client.stop();
+  return response;
+}
+
 // A single NTP query over WiFiUDP, setting the system clock on a valid
 // reply. Literal IPs, not hostnames -- Cloudflare's and Google's
 // long-stable public NTP anycast addresses, so no DNS lookup needed.
@@ -113,8 +139,8 @@ void SensorNode::begin(unsigned long connectTimeoutMs) {
   bool connected = loadSensorNodeConfig(config_);
 
   if (connected) {
-    if (config_.nodeName.length() > 0) {
-      WiFi.setHostname(config_.nodeName.c_str());
+    if (config_.deviceName.length() > 0) {
+      WiFi.setHostname(config_.deviceName.c_str());
     }
     WiFi.mode(WIFI_STA);
 
@@ -167,28 +193,29 @@ bool SensorNode::log(const std::vector<float> &values, int decimalPlaces) {
     if (!isnan(values[i])) data += String(values[i], decimalPlaces);
   }
 
-  WiFiClientSecure client;
-  client.setHandshakeTimeout(15);  // seconds; default is 120
-  if (!client.connect(serverIp_, 443, kServer, kServerRootCA, nullptr, nullptr) &&
-      !client.connect(serverIp_, 443, kServer, kServerRootCA, nullptr, nullptr)) {
-    char err[128];
-    client.lastError(err, sizeof(err));
-    Serial.printf("[SensorNode] TLS connect failed: %s\n", err);
-    return false;
-  }
-
   String body = "key=" + config_.writeKey + "&data=" + data;
-  String request = "POST /log.php HTTP/1.1\r\n";
-  request += String("Host: ") + kServer + "\r\n";
-  request += "Content-Type: application/x-www-form-urlencoded\r\n";
-  request += "Content-Length: " + String(body.length()) + "\r\n";
-  request += "Connection: close\r\n\r\n";
-  request += body;
+  String response = postToServer(serverIp_, "/sensors/log.php", body);
 
-  String response = rawHttpRequest(client, request, 5000);
-  client.stop();
-
-  Serial.printf("[SensorNode] POST /log.php (%s):\n%s\n", data.c_str(), response.c_str());
+  Serial.printf("[SensorNode] POST /sensors/log.php (%s):\n%s\n", data.c_str(), response.c_str());
 
   return response.indexOf("Data logged") >= 0;
+}
+
+bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+  if (!resolveServerIp()) return false;
+
+  String channelList;
+  for (size_t i = 0; i < channels.size(); i++) {
+    if (i > 0) channelList += "|";
+    channelList += String(channels[i].id) + "," + channels[i].property + "," + channels[i].unit;
+  }
+
+  String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) +
+                "&name=" + config_.deviceName + "&channels=" + channelList;
+  String response = postToServer(serverIp_, "/sensors/provision.php", body);
+
+  Serial.printf("[SensorNode] POST /sensors/provision.php:\n%s\n", response.c_str());
+
+  return response.indexOf("Provisioned") >= 0;
 }

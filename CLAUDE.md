@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Arduino library for ESP32 sensor nodes that report to
-`larsi.org/log.php`. Repo root doubles as the Arduino library root
+`larsi.org/sensors/log.php`. Repo root doubles as the Arduino library root
 (`library.properties`, `src/`, `examples/`) -- installed by
 cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 
@@ -10,18 +10,19 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 - `SensorNodeConfig` (`src/SensorNodeConfig.*`) -- `ssids[]`/
   `passwords[]` (fixed-size arrays, `kMaxNetworks` = 3, most-recently-
   added first, NVS keys `ssid0`/`password0`/`ssid1`/...) plus
-  `nodeName`/`deviceId`/`writeKey`/`logIntervalMinutes`, all persisted
-  via `Preferences` (NVS). Server host isn't part of the config; it's
-  a hardcoded constant in `SensorNode.cpp` (`kServer`) since one node
-  only ever reports to larsi.org -- the "different X per node" axis
-  here is sensors wired to a sketch, not backend servers.
+  `deviceName`/`deviceId`/`writeKey`/`logIntervalMinutes`, all
+  persisted via `Preferences` (NVS). Server host isn't part of the
+  config; it's a hardcoded constant in `SensorNode.cpp` (`kServer`)
+  since one node only ever reports to larsi.org -- the "different X
+  per node" axis here is sensors wired to a sketch, not backend
+  servers.
 - `SensorNodePortal` (`src/SensorNodePortal.*`) -- open AP + captive
   portal (`WebServer` + `DNSServer` catch-all) used only while none of
   the known networks connect. `runSensorNodeSetupPortal()` blocks
   forever and restarts the device on successful submit. `buildFormPage()`
-  pre-fills node name/device id/write key/log frequency from the
-  existing config (loaded fresh each render), since the common reason
-  the portal is running at all is that the node moved somewhere new --
+  pre-fills device name/id/write key/log frequency from the existing
+  config (loaded fresh each render), since the common reason the
+  portal is running at all is that the node moved somewhere new --
   only the network fields need filling in. `handleSave()` starts from
   the existing config too (not a blank one) and calls
   `addOrUpdateNetwork()`, which shifts the new network to the front and
@@ -34,6 +35,13 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   (see `https://larsi.org/sensors/sensor-node.php` in the main site
   repo) and writes it as a raw HTTP/1.1 request directly to a
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
+  `provision()` posts the device name/id and a `channel_id,property,unit`
+  list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)
+  to `/sensors/provision.php` -- idempotent server-side (only creates
+  rows that don't exist yet), so sketches call it once every boot right
+  after `begin()`, before the first `log()`. Both `log()` and
+  `provision()` share a `postToServer(path, body)` helper for the
+  connect/write/read boilerplate.
 
 ## Networking
 

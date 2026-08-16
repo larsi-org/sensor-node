@@ -1,13 +1,14 @@
 # sensor-node
 
 An Arduino library for ESP32-based sensor nodes that report to
-[larsi.org/log.php](https://larsi.org/sensors/sensor-node.php). Handles
-Wi-Fi provisioning and posting readings; bring your own sensors.
+[larsi.org/sensors/log.php](https://larsi.org/sensors/sensor-node.php).
+Handles Wi-Fi provisioning and posting readings; bring your own
+sensors.
 
 If the node can't connect to any of its known networks (nothing saved
 yet, or none in range), it opens an access point with a captive setup
 portal: pick a network from a live scan, enter the password, and set a
-node name, device id (0-255), write key, and log frequency (1, 2, 3,
+device name, device id (0-255), write key, and log frequency (1, 2, 3,
 5, 10, 15, 20, 30, or 60 minutes -- default 3). It saves the settings
 to flash (NVS) and reboots, then connects normally on every later
 boot.
@@ -17,8 +18,8 @@ most-recently-added first -- a node that moves between a handful of
 locations (e.g. two homes) reconnects immediately without
 reprovisioning every time it moves back. `begin()` tries each in turn;
 only once none of them connect does the portal come up, pre-filled
-with the existing node name/device id/write key so moving to a new
-location only means adding one new network.
+with the existing device name/id/write key so moving to a new location
+only means adding one new network.
 
 The device id is what makes a single write key usable for more than
 one physical node without their channel numbers colliding -- each
@@ -47,10 +48,12 @@ the ESP32 Arduino core.
 #include <SensorNode.h>
 
 SensorNode node;
+const std::vector<SensorNodeChannel> kChannels = {{0, "Temperature", "C"}};
 
 void setup() {
   Serial.begin(115200);
-  node.begin();  // connects, or runs the setup portal if it can't
+  node.begin();            // connects, or runs the setup portal if it can't
+  node.provision(kChannels);  // registers the device + channels (idempotent)
 }
 
 void loop() {
@@ -74,16 +77,23 @@ needs the separate "SparkFun BME280" library from the Library Manager.
 - `void resetConfig()` -- erases saved settings. Call before `begin()`
   to force the setup portal on the next call (e.g. gate it behind a
   button held at boot).
+- `bool provision(const std::vector<SensorNodeChannel> &channels)` --
+  registers this device and its channels with the server. Each
+  `SensorNodeChannel` is `{id, property, unit}` (e.g.
+  `{0, "Temperature", "C"}`), fixed by what's wired to the sketch.
+  Idempotent server-side -- only creates rows that don't exist yet, so
+  it's safe to call every boot; call it once after `begin()`, before
+  the first `log()`.
 - `bool log(const std::vector<float> &values, int decimalPlaces = 2)`
   -- posts one reading per channel, starting at this node's configured
   device id. A `NAN` entry is left out of the request entirely, which
   `log.php` treats as "skip this channel" rather than logging a zero.
   Returns whether the server confirmed the data was logged.
 - `const SensorNodeConfig &config() const` -- read-only access to the
-  loaded settings (`ssids`/`passwords` arrays, `nodeName`, `deviceId`,
-  `writeKey`, `logIntervalMinutes`). Sketches read `logIntervalMinutes`
-  themselves to compute their own `loop()` delay -- this library
-  doesn't call `log()` on a timer itself.
+  loaded settings (`ssids`/`passwords` arrays, `deviceName`,
+  `deviceId`, `writeKey`, `logIntervalMinutes`). Sketches read
+  `logIntervalMinutes` themselves to compute their own `loop()` delay
+  -- this library doesn't call `log()` on a timer itself.
 
 ## Notes
 

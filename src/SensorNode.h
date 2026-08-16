@@ -6,6 +6,17 @@
 
 #include "SensorNodeConfig.h"
 
+// One channel's identity for provision() -- id is the 0-255 offset
+// within this device (matches the position log() addresses that
+// channel at), property/unit are short human labels (e.g.
+// "Temperature", "C") stored server-side the first time this channel
+// is seen, then left alone.
+struct SensorNodeChannel {
+  uint8_t id;
+  const char *property;
+  const char *unit;
+};
+
 class SensorNode {
  public:
   // Loads saved settings and tries each known network in turn
@@ -28,6 +39,13 @@ class SensorNode {
   // skip semantics. Returns true once the server confirms the data
   // was logged.
   bool log(const std::vector<float> &values, int decimalPlaces = 2);
+
+  // Registers this device and its channels with the server -- safe to
+  // call every boot, since provision.php only creates rows that don't
+  // already exist yet (anything renamed by hand afterward is left
+  // alone). Call once after begin(), before the first log(). Returns
+  // true once the server confirms.
+  bool provision(const std::vector<SensorNodeChannel> &channels);
 
   const SensorNodeConfig &config() const { return config_; }
 
