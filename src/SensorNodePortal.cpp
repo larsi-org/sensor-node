@@ -231,14 +231,14 @@ void handleNotFound() {
 void runSensorNodeSetupPortal() {
   WiFi.mode(WIFI_AP_STA);
 
-  // Last 4 hex digits of the MAC, not the first -- the first 3 octets
-  // are the vendor OUI, shared across a huge range of Espressif chips,
-  // so every device from the same manufacturing batch would otherwise
-  // broadcast the identical AP name. The last octets are the actual
-  // per-device-unique part.
+  // Last 6 hex digits of the MAC (its full non-OUI address space), not
+  // the first -- the first 3 octets are the vendor OUI, shared across
+  // a huge range of Espressif chips, so every device from the same
+  // manufacturing batch would otherwise broadcast the identical AP
+  // name. The last 3 octets are the actual per-device-unique part.
   String mac = WiFi.macAddress();
   mac.replace(":", "");
-  String apName = "SensorNode-Setup-" + mac.substring(mac.length() - 4);
+  String apName = "SensorNode-Setup-" + mac.substring(mac.length() - 6);
   WiFi.softAP(apName.c_str());
   IPAddress apIP = WiFi.softAPIP();
 
