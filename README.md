@@ -123,6 +123,14 @@ needs the separate "SparkFun BME280" library from the Library Manager.
   (`isValidWriteKey()`) -- not just the length. A wrong-shape key would
   otherwise only fail once talking to the real server, with a generic
   "Key not found".
+- `deviceName` is sent as-is to `provision.php`/shown in reports, but
+  the network hostname (`WiFi.setHostname()`) is a sanitized version --
+  runs of anything other than letters/digits/hyphens collapse to a
+  single `-`, and leading/trailing junk is dropped. `WiFi.setHostname()`
+  itself doesn't validate anything (just silently truncates past 31
+  chars), but routers' DHCP/mDNS handling of a raw name with spaces
+  etc. can be unpredictable, so a free-text device name like
+  `"Batcave BME280 #1"` becomes the hostname `Batcave-BME280-1`.
 - The device clock is set via NTP (`WiFiUDP`, Cloudflare's and
   Google's public servers) before `log()`'s first HTTPS connection --
   needed for TLS certificate date validation to pass.

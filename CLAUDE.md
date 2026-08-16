@@ -41,7 +41,12 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   rows that don't exist yet), so sketches call it once every boot right
   after `begin()`, before the first `log()`. Both `log()` and
   `provision()` share a `postToServer(path, body)` helper for the
-  connect/write/read boilerplate. `openPortal()` is a thin wrapper
+  connect/write/read boilerplate. `sanitizeHostname()` derives the
+  network hostname from `deviceName` (letters/digits/hyphens only,
+  runs of anything else collapsed to one `-`) -- `deviceName` itself
+  stays free-text and unsanitized everywhere else (`provision()`'s
+  `name=`, reports), since `WiFi.setHostname()` is the only consumer
+  that actually needs the restricted shape. `openPortal()` is a thin wrapper
   around `runSensorNodeSetupPortal()` -- an on-demand way to reach the
   portal (pre-filled, nothing erased) without going through
   `resetConfig()`'s full wipe first. Both examples wire this to the

@@ -6,11 +6,43 @@
 #include <sys/time.h>
 #include <time.h>
 
+#include <cctype>
+
 #include "SensorNodePortal.h"
 
 namespace {
 
 const char *kServer = "larsi.org";
+
+// Reduces a free-text device name to characters safe for a network
+// hostname (RFC 1123: letters, digits, hyphens; can't start/end with
+// a hyphen). WiFi.setHostname() itself doesn't validate or reject
+// anything -- it just truncates to 31 chars -- but routers' DHCP/mDNS
+// handling of a raw name outside that shape (spaces especially) can
+// be unpredictable. Runs of disallowed characters collapse to a
+// single hyphen; leading ones are dropped rather than producing a
+// leading hyphen. The un-sanitized name is still what's sent to
+// provision.php and shown in reports -- this only affects what's
+// advertised on the network.
+String sanitizeHostname(const String &name) {
+  String result;
+  result.reserve(name.length());
+  bool lastWasHyphen = false;
+  for (size_t i = 0; i < name.length(); i++) {
+    char c = name[i];
+    if (isalnum((unsigned char)c)) {
+      result += c;
+      lastWasHyphen = false;
+    } else if (!lastWasHyphen && result.length() > 0) {
+      result += '-';
+      lastWasHyphen = true;
+    }
+  }
+  while (result.length() > 0 && result[result.length() - 1] == '-') {
+    result.remove(result.length() - 1);
+  }
+  return result;
+}
 
 // "Go Daddy Root Certificate Authority - G2", self-signed, valid to
 // 2037-12-31 -- the root larsi.org's chain currently validates against
@@ -139,8 +171,9 @@ void SensorNode::begin(unsigned long connectTimeoutMs) {
   bool connected = loadSensorNodeConfig(config_);
 
   if (connected) {
-    if (config_.deviceName.length() > 0) {
-      WiFi.setHostname(config_.deviceName.c_str());
+    String hostname = sanitizeHostname(config_.deviceName);
+    if (hostname.length() > 0) {
+      WiFi.setHostname(hostname.c_str());
     }
     WiFi.mode(WIFI_STA);
 
