@@ -23,8 +23,8 @@ only means adding one new network.
 
 The device id is what makes a single write key usable for more than
 one physical node without their channel numbers colliding -- each
-device id gets its own block of 16 channels (see "Starting at a
-Different Channel" in the [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
+device id gets its own block of 16 channels (see "Data Channel" in the
+[wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
 Different sensor nodes attached to the same location/key get different
 device ids; what sensors are actually wired to a given node is up to
 each sketch.

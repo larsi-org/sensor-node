@@ -31,9 +31,9 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 - `SensorNode` (`src/SensorNode.*`) -- the class sketches use.
   `begin()` tries each known network in turn, falls back to the portal
   if none connect, then resolves the server and syncs the clock via
-  NTP. `log()` builds the `device|values` form per the wire protocol
-  (see `https://larsi.org/sensors/sensor-node.php` in the main site
-  repo) and writes it as a raw HTTP/1.1 request directly to a
+  NTP. `log()` sends `device` and `data` as separate form fields per the
+  wire protocol (see `https://larsi.org/sensors/sensor-node.php` in the
+  main site repo) and writes it as a raw HTTP/1.1 request directly to a
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
   `provision()` posts the device name/id and a `channel_id,property,unit`
   list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)

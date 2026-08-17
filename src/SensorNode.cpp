@@ -239,16 +239,16 @@ bool SensorNode::log(const std::vector<float> &values, int decimalPlaces) {
   if (WiFi.status() != WL_CONNECTED) return false;
   if (!resolveServerIp()) return false;
 
-  String data = String(config_.deviceId) + "|";
+  String data;
   for (size_t i = 0; i < values.size(); i++) {
     if (i > 0) data += ",";
     if (!isnan(values[i])) data += String(values[i], decimalPlaces);
   }
 
-  String body = "key=" + config_.writeKey + "&data=" + data;
+  String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) + "&data=" + data;
   String response = postToServer(serverIp_, "/sensors/log", body);
 
-  Serial.printf("[SensorNode] POST /sensors/log (%s):\n%s\n", data.c_str(), response.c_str());
+  Serial.printf("[SensorNode] POST /sensors/log (device=%d, data=%s):\n%s\n", config_.deviceId, data.c_str(), response.c_str());
 
   return response.indexOf("Data logged") >= 0;
 }
