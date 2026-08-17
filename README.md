@@ -1,7 +1,7 @@
 # sensor-node
 
 An Arduino library for ESP32-based sensor nodes that report to
-[larsi.org/sensors/log.php](https://larsi.org/sensors/sensor-node.php).
+[larsi.org/sensors/log](https://larsi.org/sensors/sensor-node.php).
 Handles Wi-Fi provisioning and posting readings; bring your own
 sensors.
 
@@ -101,7 +101,7 @@ Library Manager.
 - `bool log(const std::vector<float> &values, int decimalPlaces = 2)`
   -- posts one reading per channel, starting at this node's configured
   device id. A `NAN` entry is left out of the request entirely, which
-  `log.php` treats as "skip this channel" rather than logging a zero.
+  the log endpoint treats as "skip this channel" rather than logging a zero.
   Returns whether the server confirmed the data was logged.
 - `const SensorNodeConfig &config() const` -- read-only access to the
   loaded settings (`ssids`/`passwords` arrays, `deviceName`,
@@ -131,7 +131,7 @@ Library Manager.
   (`isValidWriteKey()`) -- not just the length. A wrong-shape key would
   otherwise only fail once talking to the real server, with a generic
   "Key not found".
-- `deviceName` is sent as-is to `provision.php`/shown in reports, but
+- `deviceName` is sent as-is to the provision endpoint/shown in reports, but
   the network hostname (`WiFi.setHostname()`) is a sanitized version --
   runs of anything other than letters/digits/hyphens collapse to a
   single `-`, and leading/trailing junk is dropped. `WiFi.setHostname()`

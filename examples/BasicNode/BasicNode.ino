@@ -27,9 +27,9 @@
 // the check below entirely if you don't need it.
 const int kResetPin = 0;
 
-// Matches the log() call below. Sent once at boot; provision.php only
-// fills in rows that don't exist yet, so this is safe to leave in
-// place permanently. Replace with the real channels for your sketch.
+// Matches the log() call below. Sent once at boot; the provision
+// endpoint only fills in rows that don't exist yet, so this is safe to
+// leave in place permanently. Replace with the real channels for your sketch.
 const std::vector<SensorNodeChannel> kChannels = {
     {0, "Temperature", "C"},
     {1, "Humidity", "%"},

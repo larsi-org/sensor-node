@@ -54,13 +54,13 @@ class SensorNode {
 
   // Posts one reading per channel, addressed starting at this node's
   // configured device id (channel deviceId*16 + index). A NAN entry
-  // is omitted from the request, matching log.php's "blank value"
+  // is omitted from the request, matching the log endpoint's "blank value"
   // skip semantics. Returns true once the server confirms the data
   // was logged.
   bool log(const std::vector<float> &values, int decimalPlaces = 2);
 
   // Registers this device and its channels with the server -- safe to
-  // call every boot, since provision.php only creates rows that don't
+  // call every boot, since the provision endpoint only creates rows that don't
   // already exist yet (anything renamed by hand afterward is left
   // alone). Call once after begin(), before the first log(). Returns
   // true once the server confirms.

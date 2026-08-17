@@ -33,8 +33,8 @@
 const int kResetPin = 0;
 
 // Matches the log() call below -- channel 0: temperature C, 1: dew
-// point C, 2: humidity %, 3: pressure hPa. Sent once at boot;
-// provision.php only fills in rows that don't exist yet, so this is
+// point C, 2: humidity %, 3: pressure hPa. Sent once at boot; the
+// provision endpoint only fills in rows that don't exist yet, so this is
 // safe to leave in place permanently.
 const std::vector<SensorNodeChannel> kChannels = {
     {0, "Temperature", "C"},

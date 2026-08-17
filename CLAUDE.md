@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Arduino library for ESP32 sensor nodes that report to
-`larsi.org/sensors/log.php`. Repo root doubles as the Arduino library root
+`larsi.org/sensors/log`. Repo root doubles as the Arduino library root
 (`library.properties`, `src/`, `examples/`) -- installed by
 cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 
@@ -37,7 +37,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
   `provision()` posts the device name/id and a `channel_id,property,unit`
   list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)
-  to `/sensors/provision.php` -- idempotent server-side (only creates
+  to `/sensors/provision` -- idempotent server-side (only creates
   rows that don't exist yet), so sketches call it once every boot right
   after `begin()`, before the first `log()`. Both `log()` and
   `provision()` share a `postToServer(path, body)` helper for the

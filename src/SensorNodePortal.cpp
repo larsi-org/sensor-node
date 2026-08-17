@@ -50,7 +50,7 @@ bool isValidWriteKey(const String &key) {
   return true;
 }
 
-// Allowed log.php reporting intervals, in minutes -- the only values
+// Allowed log-endpoint reporting intervals, in minutes -- the only values
 // the portal's dropdown offers, and the only ones handleSave() accepts.
 const uint8_t kLogIntervals[] = {1, 2, 3, 5, 10, 15, 20, 30, 60};
 const size_t kLogIntervalCount = sizeof(kLogIntervals) / sizeof(kLogIntervals[0]);

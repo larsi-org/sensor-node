@@ -21,8 +21,8 @@ const char *kServer = "larsi.org";
 // handling of a raw name outside that shape (spaces especially) can
 // be unpredictable. Runs of disallowed characters collapse to a
 // single hyphen; leading ones are dropped rather than producing a
-// leading hyphen. The un-sanitized name is still what's sent to
-// provision.php and shown in reports -- this only affects what's
+// leading hyphen. The un-sanitized name is still what's sent to the
+// provision endpoint and shown in reports -- this only affects what's
 // advertised on the network.
 String sanitizeHostname(const String &name) {
   String result;
@@ -246,9 +246,9 @@ bool SensorNode::log(const std::vector<float> &values, int decimalPlaces) {
   }
 
   String body = "key=" + config_.writeKey + "&data=" + data;
-  String response = postToServer(serverIp_, "/sensors/log.php", body);
+  String response = postToServer(serverIp_, "/sensors/log", body);
 
-  Serial.printf("[SensorNode] POST /sensors/log.php (%s):\n%s\n", data.c_str(), response.c_str());
+  Serial.printf("[SensorNode] POST /sensors/log (%s):\n%s\n", data.c_str(), response.c_str());
 
   return response.indexOf("Data logged") >= 0;
 }
@@ -265,9 +265,9 @@ bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
 
   String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) +
                 "&name=" + config_.deviceName + "&channels=" + channelList;
-  String response = postToServer(serverIp_, "/sensors/provision.php", body);
+  String response = postToServer(serverIp_, "/sensors/provision", body);
 
-  Serial.printf("[SensorNode] POST /sensors/provision.php:\n%s\n", response.c_str());
+  Serial.printf("[SensorNode] POST /sensors/provision:\n%s\n", response.c_str());
 
   return response.indexOf("Provisioned") >= 0;
 }
