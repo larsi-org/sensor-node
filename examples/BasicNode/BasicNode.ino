@@ -31,8 +31,8 @@ const int kResetPin = 0;
 // endpoint only fills in rows that don't exist yet, so this is safe to
 // leave in place permanently. Replace with the real channels for your sketch.
 const std::vector<SensorNodeChannel> kChannels = {
-    {0, "Temperature", "C"},
-    {1, "Humidity", "%"},
+    {0, "YourSensor", "Temperature", "C"},
+    {1, "YourSensor", "Humidity", "%"},
 };
 
 SensorNode node;

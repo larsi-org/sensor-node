@@ -35,7 +35,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   wire protocol (see `https://larsi.org/sensors/sensor-node.php` in the
   main site repo) and writes it as a raw HTTP/1.1 request directly to a
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
-  `provision()` posts the device name/id and a `channel_id,property,unit`
+  `provision()` posts the device name/id and a `channel_id,sensor,property,unit`
   list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)
   to `/sensors/provision` -- idempotent server-side (only creates
   rows that don't exist yet), so sketches call it once every boot right

@@ -48,7 +48,7 @@ the ESP32 Arduino core.
 #include <SensorNode.h>
 
 SensorNode node;
-const std::vector<SensorNodeChannel> kChannels = {{0, "Temperature", "C"}};
+const std::vector<SensorNodeChannel> kChannels = {{0, "BME280", "Temperature", "C"}};
 
 void setup() {
   Serial.begin(115200);
@@ -93,8 +93,8 @@ Library Manager.
   wiring (a button to GND).
 - `bool provision(const std::vector<SensorNodeChannel> &channels)` --
   registers this device and its channels with the server. Each
-  `SensorNodeChannel` is `{id, property, unit}` (e.g.
-  `{0, "Temperature", "C"}`), fixed by what's wired to the sketch.
+  `SensorNodeChannel` is `{id, sensor, property, unit}` (e.g.
+  `{0, "BME280", "Temperature", "C"}`), fixed by what's wired to the sketch.
   Idempotent server-side -- only creates rows that don't exist yet, so
   it's safe to call every boot; call it once after `begin()`, before
   the first `log()`.

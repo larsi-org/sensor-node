@@ -8,11 +8,13 @@
 
 // One channel's identity for provision() -- id is the 0-15 offset
 // within this device (matches the position log() addresses that
-// channel at), property/unit are short human labels (e.g.
-// "Temperature", "C") stored server-side the first time this channel
-// is seen, then left alone.
+// channel at), sensor is the physical hardware's model name (e.g.
+// "BME280", "DS18B20"), property/unit are short human labels (e.g.
+// "Temperature", "C") -- all stored server-side the first time this
+// channel is seen, then left alone.
 struct SensorNodeChannel {
   uint8_t id;
+  const char *sensor;
   const char *property;
   const char *unit;
 };

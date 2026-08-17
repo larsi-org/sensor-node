@@ -260,7 +260,7 @@ bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
   String channelList;
   for (size_t i = 0; i < channels.size(); i++) {
     if (i > 0) channelList += "|";
-    channelList += String(channels[i].id) + "," + channels[i].property + "," + channels[i].unit;
+    channelList += String(channels[i].id) + "," + channels[i].sensor + "," + channels[i].property + "," + channels[i].unit;
   }
 
   String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) +

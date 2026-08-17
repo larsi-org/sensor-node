@@ -37,10 +37,10 @@ const int kResetPin = 0;
 // provision endpoint only fills in rows that don't exist yet, so this is
 // safe to leave in place permanently.
 const std::vector<SensorNodeChannel> kChannels = {
-    {0, "Temperature", "C"},
-    {1, "Dew Point Temperature", "C"},
-    {2, "Relative Humidity", "%"},
-    {3, "Pressure", "hPa"},
+    {0, "BME280", "Temperature", "C"},
+    {1, "BME280", "Dew Point Temperature", "C"},
+    {2, "BME280", "Relative Humidity", "%"},
+    {3, "BME280", "Pressure", "hPa"},
 };
 
 SensorNode node;
