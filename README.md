@@ -8,7 +8,7 @@ sensors.
 If the node can't connect to any of its known networks (nothing saved
 yet, or none in range), it opens an access point with a captive setup
 portal: pick a network from a live scan, enter the password, and set a
-device name, device id (0-255), write key, and log frequency (1, 2, 3,
+device name, device id (0-15), write key, and log frequency (1, 2, 3,
 5, 10, 15, 20, 30, or 60 minutes -- default 3). It saves the settings
 to flash (NVS) and reboots, then connects normally on every later
 boot.
@@ -23,7 +23,7 @@ only means adding one new network.
 
 The device id is what makes a single write key usable for more than
 one physical node without their channel numbers colliding -- each
-device id gets its own block of 256 channels (see "Starting at a
+device id gets its own block of 16 channels (see "Starting at a
 Different Channel" in the [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
 Different sensor nodes attached to the same location/key get different
 device ids; what sensors are actually wired to a given node is up to

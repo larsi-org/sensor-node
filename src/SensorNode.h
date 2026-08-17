@@ -6,7 +6,7 @@
 
 #include "SensorNodeConfig.h"
 
-// One channel's identity for provision() -- id is the 0-255 offset
+// One channel's identity for provision() -- id is the 0-15 offset
 // within this device (matches the position log() addresses that
 // channel at), property/unit are short human labels (e.g.
 // "Temperature", "C") stored server-side the first time this channel
@@ -53,7 +53,7 @@ class SensorNode {
   void checkPortalButton(uint8_t pin, unsigned long wipeHoldMs = 5000);
 
   // Posts one reading per channel, addressed starting at this node's
-  // configured device id (channel deviceId*256 + index). A NAN entry
+  // configured device id (channel deviceId*16 + index). A NAN entry
   // is omitted from the request, matching log.php's "blank value"
   // skip semantics. Returns true once the server confirms the data
   // was logged.

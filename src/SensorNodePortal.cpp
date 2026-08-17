@@ -163,7 +163,7 @@ String buildFormPage() {
   page += "<label>Wi-Fi Password</label><input type=\"password\" name=\"password\">";
   page += "<label>Device Name</label><input type=\"text\" name=\"deviceName\" maxlength=\"32\" value=\"" +
           htmlEscape(existing.deviceName) + "\">";
-  page += "<label>Device ID (0-255)</label><input type=\"number\" name=\"deviceId\" min=\"0\" max=\"255\" value=\"" +
+  page += "<label>Device ID (0-15)</label><input type=\"number\" name=\"deviceId\" min=\"0\" max=\"15\" value=\"" +
           String(existing.deviceId) + "\" required>";
   page += "<label>Write Key (16 characters, starts with a letter)</label>";
   // maxlength deliberately generous (not 16): a pasted key with
@@ -195,7 +195,7 @@ void handleSave() {
   String newSsid = server.arg("ssid");
   String newPassword = server.arg("password");
   config.deviceName = server.arg("deviceName");
-  config.deviceId = (uint8_t)constrain(server.arg("deviceId").toInt(), 0, 255);
+  config.deviceId = (uint8_t)constrain(server.arg("deviceId").toInt(), 0, 15);
   config.writeKey = server.arg("writeKey");
   config.writeKey.trim();  // strip accidental leading/trailing whitespace from copy-paste
   uint8_t logInterval = (uint8_t)server.arg("logInterval").toInt();
