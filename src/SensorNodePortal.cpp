@@ -73,6 +73,20 @@ String buildLogIntervalOptions(uint8_t selected) {
   return options;
 }
 
+// Device IDs are 0-15 (larsi.org's flat sensor addressing is
+// 16*deviceId+channel) -- small enough that a dropdown rules out an
+// invalid value entirely, instead of relying on handleSave()'s
+// constrain() to silently clamp a stray typed-in one.
+String buildDeviceIdOptions(uint8_t selected) {
+  String options;
+  for (uint8_t id = 0; id <= 15; id++) {
+    options += "<option value=\"" + String(id) + "\"";
+    if (id == selected) options += " selected";
+    options += ">" + String(id) + "</option>";
+  }
+  return options;
+}
+
 // Adds a new network at the front of config's known-network list
 // (most-recently-added first), shifting the rest down and dropping
 // the oldest if full. If ssid already matches an existing slot, just
@@ -163,8 +177,8 @@ String buildFormPage() {
   page += "<label>Wi-Fi Password</label><input type=\"password\" name=\"password\">";
   page += "<label>Device Name</label><input type=\"text\" name=\"deviceName\" maxlength=\"32\" value=\"" +
           htmlEscape(existing.deviceName) + "\">";
-  page += "<label>Device ID (0-15)</label><input type=\"number\" name=\"deviceId\" min=\"0\" max=\"15\" value=\"" +
-          String(existing.deviceId) + "\" required>";
+  page += "<label>Device ID</label><select name=\"deviceId\">" +
+          buildDeviceIdOptions(existing.deviceId) + "</select>";
   page += "<label>Write Key (16 characters, starts with a letter)</label>";
   // maxlength deliberately generous (not 16): a pasted key with
   // accidental leading/trailing whitespace is longer than 16 chars
