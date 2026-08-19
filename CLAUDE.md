@@ -64,7 +64,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   holding the pin while the device is already looping does nothing;
   it has to be held through an actual reset (button press or power
   cycle) so `setup()` re-reads it. `kResetPin` in both examples is
-  GPIO0, not arbitrary: on the SparkFun ESP32-C6 Thing Plus, GPIO9 is
+  GPIO2, not arbitrary: on the SparkFun ESP32-C6 Thing Plus, GPIO9 is
   the chip's boot-mode strapping pin *and* the board's onboard BOOT
   button -- holding it through a reset sends the chip into USB
   download/bootloader mode instead of running any application code at
@@ -75,11 +75,11 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   is only true on classic ESP32, not C6/S3/C3), GPIO4/5/8/9/15 are the
   ESP32-C6's only strapping pins. GPIO12/13 are USB D-/D+ (the same
   USB-JTAG connection used for flashing/serial), GPIO6/7/11/18-23 are
-  tied to this board's onboard Qwiic/battery-gauge/microSD/RGB LED --
-  all reserved, avoid them for any new digitalRead()/pinMode() use on
-  this board. GPIO0 is clear of all of that and happens to sit right
-  next to a GND pin on the physical header, convenient for a jumper
-  wire straight across -- `INPUT_PULLUP` is already set in code, no
+  tied to the Thing Plus's onboard Qwiic/battery-gauge/microSD/RGB LED,
+  and the Qwiic Pocket Dev Board only breaks out GPIO2/3/4/5/16/17/18/19
+  to headers at all -- GPIO2 and GPIO3 are the only pins free of every
+  reservation on both boards, so that's the one to keep using as new
+  board variants get added. `INPUT_PULLUP` is already set in code, no
   external resistor needed.
 
 ## Networking

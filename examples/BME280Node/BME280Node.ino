@@ -5,37 +5,20 @@
 // search "SparkFun BME280"). Wire the breakout to the board's
 // Qwiic/I2C connector (SDA/SCL) -- default I2C address 0x77.
 //
-// On first boot (or whenever it can't connect), the node opens an
-// access point named "SensorNode-Setup-XXXX" -- join it and visit
-// http://192.168.4.1/ to pick a Wi-Fi network and enter this device's
-// name, id, write key, and log frequency. It saves and reboots
-// automatically.
-//
-// Hold the button at boot to reach the portal on demand: a short hold
-// opens it pre-filled, without erasing anything (for tweaking one
-// field, e.g. the device name); a longer hold wipes the saved config
-// first, so the portal comes up blank instead (see
-// checkPortalButton()'s wipeHoldMs).
+// See BasicNode.ino for the setup-portal walkthrough (first boot, the
+// SensorNode-Setup-XXXXXX access point, and the reset-button hold
+// behavior) -- identical here.
 
 #include <SensorNode.h>
 #include <SparkFunBME280.h>
 #include <Wire.h>
 
-// Hold this pin low at boot to reach the setup portal on demand (e.g.
-// wire a button, or briefly jumper it to GND) -- short hold opens it
-// pre-filled, long hold wipes first (see checkPortalButton()'s default
-// wipeHoldMs). GPIO0 avoids this board's reserved pins: 4/5/8/9/15
-// are chip strapping pins (9 is also the onboard BOOT button -- see
-// CLAUDE.md), 12/13 are USB D-/D+ (same USB-JTAG used for flashing/
-// serial), 6/7/11/18-23 are tied to onboard Qwiic/battery-gauge/
-// microSD/RGB LED. Change to match your board's free pins, or delete
-// the check below entirely if you don't need it.
-const int kResetPin = 0;
+// Same reset pin and rationale as BasicNode.ino.
+const int kResetPin = 2;
 
-// Matches the log() call below -- channel 0: temperature C, 1: dew
-// point C, 2: humidity %, 3: pressure hPa. Sent once at boot; the
-// provision endpoint only fills in rows that don't exist yet, so this is
-// safe to leave in place permanently.
+// Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
+// hPa. See BasicNode.ino for why this list is safe to leave in place
+// permanently (provision() semantics).
 const std::vector<SensorNodeChannel> kChannels = {
     {0, "BME280", "Temperature", "C"},
     {1, "BME280", "Dew Point Temperature", "C"},
@@ -58,6 +41,14 @@ void setup() {
   if (!bme.beginI2C()) {
     Serial.println("BME280 not detected -- check wiring.");
   }
+
+  // The very first reading right after boot occasionally comes back as a
+  // fixed garbage value (seen in production: identical bogus temp/humidity/
+  // pressure on two separate boots) -- likely the sensor or I2C bus not yet
+  // settled amid WiFi connect/provisioning right beforehand. Give it one
+  // full log interval to settle, capped at 3 minutes so a long-interval
+  // device doesn't sit dark for its whole first cycle.
+  delay(min(node.config().logIntervalMinutes, (uint8_t)3) * 60UL * 1000);
 }
 
 void loop() {

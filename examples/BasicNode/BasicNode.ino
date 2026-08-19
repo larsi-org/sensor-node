@@ -3,7 +3,7 @@
 // sensor reads.
 //
 // On first boot (or whenever it can't connect), the node opens an
-// access point named "SensorNode-Setup-XXXX" -- join it and visit
+// access point named "SensorNode-Setup-XXXXXX" -- join it and visit
 // http://192.168.4.1/ to pick a Wi-Fi network and enter this device's
 // name, id, write key, and log frequency. It saves and reboots
 // automatically.
@@ -19,13 +19,12 @@
 // Hold this pin low at boot to reach the setup portal on demand (e.g.
 // wire a button, or briefly jumper it to GND) -- short hold opens it
 // pre-filled, long hold wipes first (see checkPortalButton()'s default
-// wipeHoldMs). GPIO0 avoids this board's reserved pins: 4/5/8/9/15
-// are chip strapping pins (9 is also the onboard BOOT button -- see
-// CLAUDE.md), 12/13 are USB D-/D+ (same USB-JTAG used for flashing/
-// serial), 6/7/11/18-23 are tied to onboard Qwiic/battery-gauge/
-// microSD/RGB LED. Change to match your board's free pins, or delete
-// the check below entirely if you don't need it.
-const int kResetPin = 0;
+// wipeHoldMs). GPIO2 and GPIO3 are the only pins free on both the
+// SparkFun ESP32-C6 Thing Plus and the SparkFun Qwiic Pocket Dev Board
+// -- see CLAUDE.md for the reserved-pin breakdown on each. Change to
+// match your board's free pins, or delete the check below entirely if
+// you don't need it.
+const int kResetPin = 2;
 
 // Matches the log() call below. Sent once at boot; the provision
 // endpoint only fills in rows that don't exist yet, so this is safe to
