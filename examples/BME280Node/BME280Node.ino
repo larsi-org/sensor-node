@@ -52,13 +52,12 @@ void setup() {
 }
 
 void loop() {
-  float tempC = bme.readTempC();
-  float humidityPct = bme.readFloatHumidity();
-  float pressureHpa = bme.readFloatPressure() / 100.0;
-  float dewPointTempC = bme.dewPointC();
+  float ch0 = bme.readTempC();                 // temperature C
+  float ch2 = bme.readFloatHumidity();         // humidity %
+  float ch3 = bme.readFloatPressure() / 100.0; // pressure hPa
+  float ch1 = bme.dewPointC();                 // dew point C
 
-  // channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure hPa
-  node.log({tempC, dewPointTempC, humidityPct, pressureHpa});
+  node.log({ch0, ch1, ch2, ch3});
 
   delay(node.config().logIntervalMinutes * 60UL * 1000);
 }
