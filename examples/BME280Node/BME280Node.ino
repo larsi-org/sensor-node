@@ -14,7 +14,7 @@
 #include <Wire.h>
 
 // Same reset pin and rationale as BasicNode.ino.
-const int kResetPin = 0;
+const int kResetPin = 2;
 
 // Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
 // hPa. See BasicNode.ino for why this list is safe to leave in place

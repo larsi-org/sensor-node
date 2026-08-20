@@ -19,13 +19,10 @@
 // Hold this pin low at boot to reach the setup portal on demand (e.g.
 // wire a button, or briefly jumper it to GND) -- short hold opens it
 // pre-filled, long hold wipes first (see checkPortalButton()'s default
-// wipeHoldMs). Reverted from GPIO2 back to GPIO0 (2026-08-19): a real
-// Thing Plus started driving an onboard LED bright white after the
-// GPIO2 switch, right when its sensor started failing -- GPIO2 may not
-// actually be free of every onboard peripheral on this board despite
-// earlier research. Change to match your board's free pins, or delete
-// the check below entirely if you don't need it.
-const int kResetPin = 0;
+// wipeHoldMs). GPIO2 -- see CLAUDE.md for why this pin specifically.
+// Change to match your board's free pins, or delete the check below
+// entirely if you don't need it.
+const int kResetPin = 2;
 
 // Matches the log() call below. Sent once at boot; the provision
 // endpoint only fills in rows that don't exist yet, so this is safe to
