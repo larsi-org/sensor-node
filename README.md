@@ -106,9 +106,12 @@ Library" libraries from the Library Manager.
   registers this device and its channels with the server. Each
   `SensorNodeChannel` is `{id, sensor, property, unit}` (e.g.
   `{0, "BME280", "Temperature", "C"}`), fixed by what's wired to the sketch.
-  Idempotent server-side -- only creates rows that don't exist yet, so
-  it's safe to call every boot; call it once after `begin()`, before
-  the first `log()`.
+  Safe to call every boot -- server-side it's a non-empty upsert:
+  creates the device/channel rows if missing, otherwise updates only
+  the fields this call sent a non-empty value for (so an empty
+  `deviceLocation` never blanks out one set by hand, but a real
+  name/sensor/property/unit does overwrite what was there). Call it
+  once after `begin()`, before the first `log()`.
 - `bool log(const std::vector<float> &values, int decimalPlaces = 2)`
   -- posts one reading per channel, starting at this node's configured
   device id. A `NAN` entry is left out of the request entirely, which

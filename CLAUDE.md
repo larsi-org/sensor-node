@@ -37,9 +37,14 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
   `provision()` posts the device name/location/id and a `channel_id,sensor,property,unit`
   list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)
-  to `/sensors/provision` -- idempotent server-side (only creates
-  rows that don't exist yet), so sketches call it once every boot right
-  after `begin()`, before the first `log()`. Both `log()` and
+  to `/sensors/provision` -- safe to call every boot right after
+  `begin()`, before the first `log()`: server-side it's a non-empty
+  upsert (creates the row if missing, otherwise updates only the
+  fields this call actually sent a non-empty value for), not a pure
+  create-once. A blank `deviceLocation` (never set through the portal)
+  never blanks out a location set by hand server-side, but a real
+  device name/sensor/property/unit this call reports does overwrite
+  whatever was there. Both `log()` and
   `provision()` share a `postToServer(path, body)` helper for the
   connect/write/read boilerplate. `sanitizeHostname()` derives the
   network hostname from `deviceName` (letters/digits/hyphens only,
