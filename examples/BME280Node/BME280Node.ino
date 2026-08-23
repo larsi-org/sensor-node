@@ -18,7 +18,7 @@
 const int kResetPin = 2;
 
 // Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
-// hPa, 15: battery state of charge % (SensorNodeBattery::kChannel --
+// hPa, 15: battery state of charge % (SensorNodeBattery::kSocChannel --
 // reserved sitewide, see the library's README.md). See BasicNode.ino
 // for why this list is safe to leave in place permanently (provision()
 // semantics).
@@ -27,7 +27,7 @@ const std::vector<SensorNodeChannel> kChannels = {
     {1, "BME280", "Dew Point Temperature", "C"},
     {2, "BME280", "Relative Humidity", "%"},
     {3, "BME280", "Pressure", "hPa"},
-    {SensorNodeBattery::kChannel, "MAX17048", "State of Charge", "%"},
+    {SensorNodeBattery::kSocChannel, "MAX17048", "State of Charge", "%"},
 };
 
 SensorNode node;

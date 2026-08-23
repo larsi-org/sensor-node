@@ -124,8 +124,8 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
 <SensorNodeBattery.h>`), for boards in this family that have one
 (e.g. the SparkFun ESP32-C6 Thing Plus):
 
-- `static const uint8_t kChannel = 15` -- the reserved channel number;
-  use it in both `kChannels` (`{SensorNodeBattery::kChannel, "MAX17048",
+- `static const uint8_t kSocChannel = 15` -- the reserved channel number;
+  use it in both `kChannels` (`{SensorNodeBattery::kSocChannel, "MAX17048",
   "State of Charge", "%"}`) and the matching position in `log()`'s
   vector, so the two never drift apart.
 - `bool begin(TwoWire &wirePort = Wire)` -- connects to the chip and

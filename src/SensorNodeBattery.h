@@ -17,7 +17,7 @@
 // whatever the sketch actually measures.
 class SensorNodeBattery {
  public:
-  static const uint8_t kChannel = 15;
+  static const uint8_t kSocChannel = 15;
 
   // Connects to the onboard MAX17048 and runs quickStart() (SparkFun's
   // library recommends this once per boot for a better initial SOC guess).

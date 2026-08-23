@@ -85,7 +85,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 - `SensorNodeBattery` (`src/SensorNodeBattery.*`) -- thin wrapper around
   SparkFun's `SFE_MAX1704X` for the MAX17048 fuel gauge that's on the
   board itself (not a plug-in sensor like BME280, so it lives in `src/`
-  rather than an example sketch). `kChannel = 15` is the sitewide
+  rather than an example sketch). `kSocChannel = 15` is the sitewide
   reservation (the last of a device's 16 channels) for battery state of
   charge -- see README.md. Because this is compiled unconditionally as
   part of the library (Arduino builds every `.cpp` under `src/`
