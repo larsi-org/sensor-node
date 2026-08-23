@@ -14,6 +14,7 @@ bool loadSensorNodeConfig(SensorNodeConfig &config) {
     config.passwords[i] = prefs.getString(("password" + String(i)).c_str(), "");
   }
   config.deviceName = prefs.getString("deviceName", "");
+  config.deviceLocation = prefs.getString("deviceLocation", "");
   config.deviceId = prefs.getUChar("deviceId", 0);
   config.writeKey = prefs.getString("writeKey", "");
   config.logIntervalMinutes = prefs.getUChar("logInterval", 3);
@@ -29,6 +30,7 @@ void saveSensorNodeConfig(const SensorNodeConfig &config) {
     prefs.putString(("password" + String(i)).c_str(), config.passwords[i]);
   }
   prefs.putString("deviceName", config.deviceName);
+  prefs.putString("deviceLocation", config.deviceLocation);
   prefs.putUChar("deviceId", config.deviceId);
   prefs.putString("writeKey", config.writeKey);
   prefs.putUChar("logInterval", config.logIntervalMinutes);

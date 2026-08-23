@@ -8,10 +8,12 @@ sensors.
 If the node can't connect to any of its known networks (nothing saved
 yet, or none in range), it opens an access point with a captive setup
 portal: pick a network from a live scan, enter the password, and set a
-device name, device id (0-15), write key, and log frequency (1, 2, 3,
-5, 10, 15, 20, 30, or 60 minutes -- default 3). It saves the settings
-to flash (NVS) and reboots, then connects normally on every later
-boot.
+device name, an optional location (e.g. "basement", "upstairs
+hallway" -- for telling apart multiple devices at the same
+station/write key), device id (0-15), write key, and log frequency
+(1, 2, 3, 5, 10, 15, 20, 30, or 60 minutes -- default 3). It saves
+the settings to flash (NVS) and reboots, then connects normally on
+every later boot.
 
 Up to `SensorNodeConfig::kMaxNetworks` (3) networks are remembered,
 most-recently-added first -- a node that moves between a handful of
@@ -114,7 +116,7 @@ Library" libraries from the Library Manager.
   Returns whether the server confirmed the data was logged.
 - `const SensorNodeConfig &config() const` -- read-only access to the
   loaded settings (`ssids`/`passwords` arrays, `deviceName`,
-  `deviceId`, `writeKey`, `logIntervalMinutes`). Sketches read
+  `deviceLocation`, `deviceId`, `writeKey`, `logIntervalMinutes`). Sketches read
   `logIntervalMinutes` themselves to compute their own `loop()` delay
   -- this library doesn't call `log()` on a timer itself.
 

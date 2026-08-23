@@ -177,6 +177,10 @@ String buildFormPage() {
   page += "<label>Wi-Fi Password</label><input type=\"password\" name=\"password\">";
   page += "<label>Device Name</label><input type=\"text\" name=\"deviceName\" maxlength=\"32\" value=\"" +
           htmlEscape(existing.deviceName) + "\">";
+  // Optional, matching device.device_location's varchar(32) -- e.g. "basement", "upstairs
+  // hallway" -- for telling apart multiple devices at the same station/write key.
+  page += "<label>Location (optional)</label><input type=\"text\" name=\"deviceLocation\" maxlength=\"32\" value=\"" +
+          htmlEscape(existing.deviceLocation) + "\">";
   page += "<label>Device ID</label><select name=\"deviceId\">" +
           buildDeviceIdOptions(existing.deviceId) + "</select>";
   page += "<label>Write Key (16 characters, starts with a letter)</label>";
@@ -209,6 +213,7 @@ void handleSave() {
   String newSsid = server.arg("ssid");
   String newPassword = server.arg("password");
   config.deviceName = server.arg("deviceName");
+  config.deviceLocation = server.arg("deviceLocation");
   config.deviceId = (uint8_t)constrain(server.arg("deviceId").toInt(), 0, 15);
   config.writeKey = server.arg("writeKey");
   config.writeKey.trim();  // strip accidental leading/trailing whitespace from copy-paste

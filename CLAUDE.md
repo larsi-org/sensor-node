@@ -10,7 +10,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 - `SensorNodeConfig` (`src/SensorNodeConfig.*`) -- `ssids[]`/
   `passwords[]` (fixed-size arrays, `kMaxNetworks` = 3, most-recently-
   added first, NVS keys `ssid0`/`password0`/`ssid1`/...) plus
-  `deviceName`/`deviceId`/`writeKey`/`logIntervalMinutes`, all
+  `deviceName`/`deviceLocation`/`deviceId`/`writeKey`/`logIntervalMinutes`, all
   persisted via `Preferences` (NVS). Server host isn't part of the
   config; it's a hardcoded constant in `SensorNode.cpp` (`kServer`)
   since one node only ever reports to larsi.org -- the "different X
@@ -35,7 +35,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   wire protocol (see `https://larsi.org/sensors/sensor-node.php` in the
   main site repo) and writes it as a raw HTTP/1.1 request directly to a
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
-  `provision()` posts the device name/id and a `channel_id,sensor,property,unit`
+  `provision()` posts the device name/location/id and a `channel_id,sensor,property,unit`
   list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)
   to `/sensors/provision` -- idempotent server-side (only creates
   rows that don't exist yet), so sketches call it once every boot right
