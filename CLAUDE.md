@@ -82,6 +82,21 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   board variants get added. `INPUT_PULLUP` is already set in code, no
   external resistor needed.
 
+- `SensorNodeBattery` (`src/SensorNodeBattery.*`) -- thin wrapper around
+  SparkFun's `SFE_MAX1704X` for the MAX17048 fuel gauge that's on the
+  board itself (not a plug-in sensor like BME280, so it lives in `src/`
+  rather than an example sketch). `kChannel = 15` is the sitewide
+  reservation (the last of a device's 16 channels) for battery state of
+  charge -- see README.md. Because this is compiled unconditionally as
+  part of the library (Arduino builds every `.cpp` under `src/`
+  regardless of what a sketch `#include`s), the "SparkFun MAX1704x Fuel
+  Gauge Arduino Library" dependency now applies to every sketch using
+  `SensorNode`, including ones like `examples/BasicNode` that don't
+  touch the battery channel at all -- a real departure from the
+  library's "bring your own sensors, no other dependencies" stance
+  everywhere else, accepted because the chip itself is on-board
+  hardware rather than an optional peripheral.
+
 ## Networking
 
 - **DNS** (`SensorNode::resolveServerIp()`) resolves `kServer` once via

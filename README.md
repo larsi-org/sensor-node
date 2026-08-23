@@ -29,6 +29,10 @@ Different sensor nodes attached to the same location/key get different
 device ids; what sensors are actually wired to a given node is up to
 each sketch.
 
+Channel 15 (the last of each device's 16) is reserved sitewide for
+battery state of charge, via `SensorNodeBattery` -- see the API section
+below. That leaves 0-14 for whatever the sketch actually measures.
+
 ## Install
 
 Clone (or symlink) this repo into your Arduino `libraries` folder:
@@ -38,9 +42,13 @@ git clone https://github.com/larsi-org/sensor-node.git ~/Arduino/libraries/senso
 ```
 
 Restart the Arduino IDE and `#include <SensorNode.h>` becomes
-available. No extra dependencies -- everything used (`WiFi`,
-`WebServer`, `DNSServer`, `Preferences`, `WiFiClientSecure`) ships with
-the ESP32 Arduino core.
+available. Everything used by `SensorNode` itself (`WiFi`, `WebServer`,
+`DNSServer`, `Preferences`, `WiFiClientSecure`) ships with the ESP32
+Arduino core; `SensorNodeBattery` additionally needs the "SparkFun
+MAX1704x Fuel Gauge Arduino Library" from the Library Manager -- since
+it's compiled as part of this library regardless of whether a given
+sketch includes `SensorNodeBattery.h`, that dependency applies even to
+sketches that don't use it (e.g. `examples/BasicNode`).
 
 ## Quick start
 
@@ -66,8 +74,9 @@ void loop() {
 See `examples/BasicNode` for a fuller version, including a pin you can
 hold at boot to reach the setup portal on demand, or `examples/
 BME280Node` for a real sensor (temperature, dew point, humidity,
-pressure) -- needs the separate "SparkFun BME280" library from the
-Library Manager.
+pressure, plus battery state of charge on channel 15) -- needs the
+separate "SparkFun BME280" and "SparkFun MAX1704x Fuel Gauge Arduino
+Library" libraries from the Library Manager.
 
 ## API
 
@@ -108,6 +117,21 @@ Library Manager.
   `deviceId`, `writeKey`, `logIntervalMinutes`). Sketches read
   `logIntervalMinutes` themselves to compute their own `loop()` delay
   -- this library doesn't call `log()` on a timer itself.
+
+### `SensorNodeBattery`
+
+Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
+<SensorNodeBattery.h>`), for boards in this family that have one
+(e.g. the SparkFun ESP32-C6 Thing Plus):
+
+- `static const uint8_t kChannel = 15` -- the reserved channel number;
+  use it in both `kChannels` (`{SensorNodeBattery::kChannel, "MAX17048",
+  "State of Charge", "%"}`) and the matching position in `log()`'s
+  vector, so the two never drift apart.
+- `bool begin(TwoWire &wirePort = Wire)` -- connects to the chip and
+  runs `quickStart()`. Returns false if it doesn't respond.
+- `float readSOC()` -- state of charge, 0-100%. Returns `NAN` (which
+  `log()` then skips entirely) if `begin()` wasn't called or failed.
 
 ## Notes
 
