@@ -48,10 +48,13 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `provision()` share a `postToServer(path, body)` helper for the
   connect/write/read boilerplate. `sanitizeHostname()` derives the
   network hostname from `deviceName` (letters/digits/hyphens only,
-  runs of anything else collapsed to one `-`) -- `deviceName` itself
-  stays free-text and unsanitized everywhere else (`provision()`'s
-  `name=`, reports), since `WiFi.setHostname()` is the only consumer
-  that actually needs the restricted shape. `openPortal()` is a thin
+  runs of anything else collapsed to one `-`), space-joined with
+  `deviceLocation` first when it's set -- so devices sharing one
+  `deviceName` (e.g. several identical nodes at the same station) get
+  distinct hostnames instead of colliding. Both fields stay free-text
+  and unsanitized everywhere else (`provision()`'s `name=`/`location=`,
+  reports), since `WiFi.setHostname()` is the only consumer that
+  actually needs the restricted shape. `openPortal()` is a thin
   wrapper around `runSensorNodeSetupPortal()` -- an on-demand way to
   reach the portal (pre-filled, nothing erased) without going through
   `resetConfig()`'s full wipe first. `checkPortalButton(pin,
