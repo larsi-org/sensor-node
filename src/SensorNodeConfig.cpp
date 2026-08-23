@@ -17,7 +17,7 @@ bool loadSensorNodeConfig(SensorNodeConfig &config) {
   config.deviceLocation = prefs.getString("deviceLocation", "");
   config.deviceId = prefs.getUChar("deviceId", 0);
   config.writeKey = prefs.getString("writeKey", "");
-  config.logIntervalMinutes = prefs.getUChar("logInterval", 3);
+  config.logIntervalMinutes = prefs.getUChar("logInterval", 5);
   prefs.end();
   return config.isComplete();
 }
@@ -41,5 +41,20 @@ void clearSensorNodeConfig() {
   Preferences prefs;
   prefs.begin(kNamespace, false);
   prefs.clear();
+  prefs.end();
+}
+
+bool firmwareVersionChanged(uint32_t version) {
+  Preferences prefs;
+  prefs.begin(kNamespace, true);
+  uint32_t stored = prefs.getUInt("fwVersion", 0);
+  prefs.end();
+  return stored != version;
+}
+
+void markFirmwareVersionSeen(uint32_t version) {
+  Preferences prefs;
+  prefs.begin(kNamespace, false);
+  prefs.putUInt("fwVersion", version);
   prefs.end();
 }

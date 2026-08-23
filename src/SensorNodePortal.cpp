@@ -18,6 +18,11 @@ DNSServer dnsServer;
 WebServer server(80);
 bool saved = false;
 
+// Set once, at the top of runSensorNodeSetupPortal(); only actually persisted (see
+// handleSave()) once the user submits, not just because the portal was entered -- see
+// SensorNodePortal.h.
+uint32_t pendingFirmwareVersion = 0;
+
 String htmlEscape(const String &in) {
   String out;
   out.reserve(in.length());
@@ -225,7 +230,7 @@ void handleSave() {
   config.writeKey = server.arg("writeKey");
   config.writeKey.trim();  // strip accidental leading/trailing whitespace from copy-paste
   uint8_t logInterval = (uint8_t)server.arg("logInterval").toInt();
-  config.logIntervalMinutes = isValidLogInterval(logInterval) ? logInterval : 3;
+  config.logIntervalMinutes = isValidLogInterval(logInterval) ? logInterval : 5;
 
   if (newSsid.length() == 0) {
     server.send(400, "text/html", "<p>Wi-Fi network is required. <a href=\"/\">Back</a></p>");
@@ -241,6 +246,7 @@ void handleSave() {
   addOrUpdateNetwork(config, newSsid, newPassword);
 
   saveSensorNodeConfig(config);
+  if (pendingFirmwareVersion != 0) markFirmwareVersionSeen(pendingFirmwareVersion);
   server.send(200, "text/html", "<p>Saved. Rebooting...</p>");
   saved = true;
 }
@@ -254,7 +260,9 @@ void handleNotFound() {
 
 }  // namespace
 
-void runSensorNodeSetupPortal() {
+void runSensorNodeSetupPortal(uint32_t firmwareVersion) {
+  pendingFirmwareVersion = firmwareVersion;
+
   WiFi.mode(WIFI_AP_STA);
 
   // Last 6 hex digits of the MAC (its full non-OUI address space), not

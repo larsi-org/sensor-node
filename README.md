@@ -11,7 +11,7 @@ portal: pick a network from a live scan, enter the password, and set a
 device name, an optional location (e.g. "basement", "upstairs
 hallway" -- for telling apart multiple devices at the same
 station/write key), device id (0-15), write key, and log frequency
-(1, 2, 3, 5, 10, 15, 20, 30, or 60 minutes -- default 3). It saves
+(1, 2, 3, 5, 10, 15, 20, 30, or 60 minutes -- default 5). It saves
 the settings to flash (NVS) and reboots, then connects normally on
 every later boot.
 

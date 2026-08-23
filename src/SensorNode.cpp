@@ -211,6 +211,13 @@ void SensorNode::resetConfig() { clearSensorNodeConfig(); }
 
 void SensorNode::openPortal() { runSensorNodeSetupPortal(); }
 
+void SensorNode::checkFirmwareVersion(uint32_t version) {
+  if (!firmwareVersionChanged(version)) return;
+  Serial.printf("[SensorNode] Firmware version changed (now %lu) -- opening setup portal.\n",
+                (unsigned long)version);
+  runSensorNodeSetupPortal(version);  // never returns; reboots on save
+}
+
 void SensorNode::checkPortalButton(uint8_t pin, unsigned long wipeHoldMs) {
   pinMode(pin, INPUT_PULLUP);
   if (digitalRead(pin) != LOW) return;

@@ -13,6 +13,10 @@
 // field, e.g. the device name); a longer hold wipes the saved config
 // first, so the portal comes up blank instead (see
 // checkPortalButton()'s wipeHoldMs).
+//
+// The portal also opens automatically, without touching the button,
+// whenever kFirmwareVersion below doesn't match what the device last
+// booted with -- see checkFirmwareVersion().
 
 #include <SensorNode.h>
 
@@ -24,9 +28,15 @@
 // entirely if you don't need it.
 const int kResetPin = 2;
 
+// Bump this to force the setup portal open once on the next boot -- e.g. after adding a new
+// config field to the portal you want existing devices to fill in, without needing physical
+// access to the reset button. See checkFirmwareVersion().
+const uint32_t kFirmwareVersion = 1;
+
 // Matches the log() call below. Sent once at boot; the provision
-// endpoint only fills in rows that don't exist yet, so this is safe to
-// leave in place permanently. Replace with the real channels for your sketch.
+// endpoint is a non-empty upsert (updates a field with a real value,
+// leaves one that's empty alone), so this is safe to leave in place
+// permanently. Replace with the real channels for your sketch.
 const std::vector<SensorNodeChannel> kChannels = {
     {0, "YourSensor", "Temperature", "C"},
     {1, "YourSensor", "Humidity", "%"},
@@ -38,6 +48,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
+  node.checkFirmwareVersion(kFirmwareVersion);
   node.checkPortalButton(kResetPin);
   node.begin();
   node.provision(kChannels);

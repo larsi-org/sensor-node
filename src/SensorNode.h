@@ -44,6 +44,19 @@ class SensorNode {
   // user submits.
   void openPortal();
 
+  // Compares version against what was stored on the last boot that actually submitted the
+  // setup portal. If it's different -- including the very first boot of a version-checking
+  // sketch -- opens the setup portal (pre-filled, nothing erased, same as a short
+  // checkPortalButton() press), never returning, so a firmware update always gets one chance
+  // to revisit settings (e.g. a newly added config field) before falling through to normal
+  // logging. version itself is only stored once the portal is actually submitted, not just
+  // because this opened it -- a reset or power loss while it's sitting open unconfigured
+  // leaves the stored value untouched, so the next boot offers the portal again instead of
+  // wrongly assuming it already happened. A no-op if version already matches. Call once at the
+  // top of setup(), before checkPortalButton()/begin() -- see examples/BasicNode/examples/
+  // BME280Node.
+  void checkFirmwareVersion(uint32_t version);
+
   // Configures pin as INPUT_PULLUP and, if held low at call time,
   // blocks measuring how long: held past wipeHoldMs calls
   // resetConfig() (so begin() below falls into the portal blank);
@@ -61,11 +74,10 @@ class SensorNode {
   // was logged.
   bool log(const std::vector<float> &values, int decimalPlaces = 2);
 
-  // Registers this device and its channels with the server -- safe to
-  // call every boot, since the provision endpoint only creates rows that don't
-  // already exist yet (anything renamed by hand afterward is left
-  // alone). Call once after begin(), before the first log(). Returns
-  // true once the server confirms.
+  // Registers this device and its channels with the server -- safe to call every boot: the
+  // provision endpoint is a non-empty upsert, so an empty field here never overwrites a value
+  // set by hand server-side, but a real one does update the row. Call once after begin(),
+  // before the first log(). Returns true once the server confirms.
   bool provision(const std::vector<SensorNodeChannel> &channels);
 
   const SensorNodeConfig &config() const { return config_; }

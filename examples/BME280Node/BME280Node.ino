@@ -9,13 +9,31 @@
 // SensorNode-Setup-XXXXXX access point, and the reset-button hold
 // behavior) -- identical here.
 
+#include <Adafruit_SSD1306.h>
 #include <SensorNode.h>
 #include <SensorNodeBattery.h>
 #include <SparkFunBME280.h>
 #include <Wire.h>
 
+// Optional Adafruit FeatherWing OLED (128x64, SSD1306, I2C address 0x3C --
+// shares the Qwiic bus with the BME280/MAX17048). Detected at boot via
+// oled.begin()'s return value, same pattern as bme.beginI2C()/battery.begin()
+// below -- if it's not physically connected, oledPresent stays false and
+// every display call in loop() is skipped entirely.
+const int kScreenWidth = 128;
+const int kScreenHeight = 64;
+const uint8_t kOledAddress = 0x3C;
+Adafruit_SSD1306 oled(kScreenWidth, kScreenHeight, &Wire, -1);
+bool oledPresent = false;
+String oledTitle;  // deviceLocation, else deviceName, else a hardcoded fallback -- set in setup()
+
 // Same reset pin and rationale as BasicNode.ino.
 const int kResetPin = 2;
+
+// Bump to force the setup portal open once on the next boot, without touching the reset
+// button/jumper -- see checkFirmwareVersion(). Currently 3 to force one portal visit on
+// batcave's device 0 to fill in Location (added after this device was first provisioned).
+const uint32_t kFirmwareVersion = 3;
 
 // Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
 // hPa, 15: battery state of charge % (SensorNodeBattery::kSocChannel --
@@ -38,9 +56,15 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
+  node.checkFirmwareVersion(kFirmwareVersion);
   node.checkPortalButton(kResetPin);
   node.begin();
   node.provision(kChannels);
+
+  const SensorNodeConfig &config = node.config();
+  oledTitle = config.deviceLocation.length() > 0 ? config.deviceLocation
+              : config.deviceName.length() > 0   ? config.deviceName
+                                                  : "sensor-node: BME280";
 
   Wire.begin();
   if (!bme.beginI2C()) {
@@ -48,6 +72,13 @@ void setup() {
   }
   if (!battery.begin()) {
     Serial.println("MAX17048 not detected -- battery channel will read NAN.");
+  }
+  oledPresent = oled.begin(SSD1306_SWITCHCAPVCC, kOledAddress);
+  if (!oledPresent) {
+    Serial.println("OLED not detected -- skipping display.");
+  } else {
+    oled.setTextColor(SSD1306_WHITE);
+    oled.setTextSize(1);
   }
 
   // The very first reading right after boot occasionally comes back as a
@@ -72,6 +103,20 @@ void loop() {
   node.log({ch0, ch1, ch2, ch3,
             NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN,
             ch15});
+
+  // "Current values" text screen -- entirely skipped if the OLED wasn't
+  // detected at boot, so this is a no-op on a board with none wired up.
+  if (oledPresent) {
+    oled.clearDisplay();
+    oled.setCursor(0, 0);
+    oled.println(oledTitle);
+    oled.printf("Temp:  %.1f C\n", ch0);
+    oled.printf("Dew:   %.1f C\n", ch1);
+    oled.printf("Humid: %.1f %%\n", ch2);
+    oled.printf("Press: %.1f hPa\n", ch3);
+    oled.printf("Batt:  %.1f %%\n", ch15);
+    oled.display();
+  }
 
   delay(node.config().logIntervalMinutes * 60UL * 1000);
 }
