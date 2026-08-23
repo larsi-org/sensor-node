@@ -20,8 +20,9 @@ most-recently-added first -- a node that moves between a handful of
 locations (e.g. two homes) reconnects immediately without
 reprovisioning every time it moves back. `begin()` tries each in turn;
 only once none of them connect does the portal come up, pre-filled
-with the existing device name/id/write key so moving to a new location
-only means adding one new network.
+with the existing device name/location/id/write key (but not the
+network password -- see Notes) so moving to a new location only means
+adding one new network.
 
 The device id is what makes a single write key usable for more than
 one physical node without their channel numbers colliding -- each
@@ -150,6 +151,10 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
 - The setup portal's access point is open (no password) and only runs
   while unconfigured/disconnected -- get a write key first (see the
   [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
+- The portal's Wi-Fi Password field is never pre-filled, even when
+  re-opening the portal just to tweak the device name/location. Leave
+  it blank to keep the saved password for an already-known network --
+  it's only saved as typed for a genuinely new network.
 - The write key must match `larsi.org`'s own generator (`id.php`'s
   `generateID(16)`): 16 characters, starting with a letter, the rest
   letters/digits/`-`/`_`. `handleSave()` trims the submitted value

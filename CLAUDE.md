@@ -20,14 +20,21 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   portal (`WebServer` + `DNSServer` catch-all) used only while none of
   the known networks connect. `runSensorNodeSetupPortal()` blocks
   forever and restarts the device on successful submit. `buildFormPage()`
-  pre-fills device name/id/write key/log frequency from the existing
-  config (loaded fresh each render), since the common reason the
-  portal is running at all is that the node moved somewhere new --
-  only the network fields need filling in. `handleSave()` starts from
-  the existing config too (not a blank one) and calls
+  pre-fills device name/location/id/write key/log frequency from the
+  existing config (loaded fresh each render), since the common reason
+  the portal is running at all is that the node moved somewhere new --
+  only the network fields need filling in (the password field is a
+  deliberate exception, see below). `handleSave()` starts from the
+  existing config too (not a blank one) and calls
   `addOrUpdateNetwork()`, which shifts the new network to the front and
   drops the oldest once all `kMaxNetworks` slots are full, or updates
-  in place if the submitted SSID matches an already-known one.
+  in place if the submitted SSID matches an already-known one -- but
+  only if the submitted password is non-empty; a blank password on an
+  already-known SSID leaves the saved one alone (a blank password on a
+  genuinely new SSID is still saved as-is, for a real open network).
+  Without this, resubmitting the form just to change the device
+  name/location -- the password field is never pre-filled -- would
+  silently erase a working Wi-Fi password.
 - `SensorNode` (`src/SensorNode.*`) -- the class sketches use.
   `begin()` tries each known network in turn, falls back to the portal
   if none connect, then resolves the server and syncs the clock via
