@@ -31,7 +31,13 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   existing config (loaded fresh each render), since the common reason
   the portal is running at all is that the node moved somewhere new --
   only the network fields need filling in (the password field is a
-  deliberate exception, see below). `handleSave()` starts from the
+  deliberate exception, see below). Device Name is required (`required`
+  client-side, rejected with 400 in `handleSave()` if empty after
+  `trim()` server-side too) and defaults to `"Weather " + macSuffix()`
+  when nothing's saved yet, so a fresh device is never left with a
+  blank/generic name -- `macSuffix()` (last 6 hex digits of the MAC,
+  shared with the AP name below) is the one piece of per-device
+  uniqueness available before the user's typed anything. `handleSave()` starts from the
   existing config too (not a blank one) and calls
   `addOrUpdateNetwork()`, which shifts the new network to the front and
   drops the oldest once all `kMaxNetworks` slots are full, or updates

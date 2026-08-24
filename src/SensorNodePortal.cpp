@@ -23,6 +23,16 @@ bool saved = false;
 // SensorNodePortal.h.
 uint32_t pendingFirmwareVersion = 0;
 
+// Last 6 hex digits of the MAC (its full non-OUI address space), not the first -- the first 3
+// octets are the vendor OUI, shared across a huge range of Espressif chips, so every device from
+// the same manufacturing batch would otherwise collide. The last 3 octets are the actual
+// per-device-unique part. Shared by the AP name and the default device name below.
+String macSuffix() {
+  String mac = WiFi.macAddress();
+  mac.replace(":", "");
+  return mac.substring(mac.length() - 6);
+}
+
 String htmlEscape(const String &in) {
   String out;
   out.reserve(in.length());
@@ -187,8 +197,12 @@ String buildFormPage() {
   page += "<label>Wi-Fi Network</label><select name=\"ssid\">" + options + "</select>";
   page += "<label>Wi-Fi Password</label><input type=\"password\" name=\"password\" "
           "placeholder=\"Leave blank to keep the saved password for a known network\">";
-  page += "<label>Device Name (and Location)</label><input type=\"text\" name=\"deviceName\" maxlength=\"32\" value=\"" +
-          htmlEscape(existing.deviceName) + "\">";
+  // Defaults to "Weather <last 6 MAC hex digits>" when nothing's saved yet, so a brand-new
+  // device never ships with a blank/generic name -- required below forces this default (or
+  // whatever the user replaces it with) to actually get submitted.
+  String defaultDeviceName = existing.deviceName.length() > 0 ? existing.deviceName : "Weather " + macSuffix();
+  page += "<label>Device Name (and Location)</label><input type=\"text\" name=\"deviceName\" maxlength=\"32\" required value=\"" +
+          htmlEscape(defaultDeviceName) + "\">";
   page += "<label>Device ID</label><select name=\"deviceId\">" +
           buildDeviceIdOptions(existing.deviceId) + "</select>";
   page += "<label>Write Key (16 characters, starts with a letter)</label>";
@@ -221,6 +235,7 @@ void handleSave() {
   String newSsid = server.arg("ssid");
   String newPassword = server.arg("password");
   config.deviceName = server.arg("deviceName");
+  config.deviceName.trim();  // strip accidental leading/trailing whitespace from copy-paste
   config.deviceId = (uint8_t)constrain(server.arg("deviceId").toInt(), 0, 15);
   config.writeKey = server.arg("writeKey");
   config.writeKey.trim();  // strip accidental leading/trailing whitespace from copy-paste
@@ -229,6 +244,10 @@ void handleSave() {
 
   if (newSsid.length() == 0) {
     server.send(400, "text/html", "<p>Wi-Fi network is required. <a href=\"/\">Back</a></p>");
+    return;
+  }
+  if (config.deviceName.length() == 0) {
+    server.send(400, "text/html", "<p>Device Name is required. <a href=\"/\">Back</a></p>");
     return;
   }
   if (!isValidWriteKey(config.writeKey)) {
@@ -260,14 +279,7 @@ void runSensorNodeSetupPortal(uint32_t firmwareVersion) {
 
   WiFi.mode(WIFI_AP_STA);
 
-  // Last 6 hex digits of the MAC (its full non-OUI address space), not
-  // the first -- the first 3 octets are the vendor OUI, shared across
-  // a huge range of Espressif chips, so every device from the same
-  // manufacturing batch would otherwise broadcast the identical AP
-  // name. The last 3 octets are the actual per-device-unique part.
-  String mac = WiFi.macAddress();
-  mac.replace(":", "");
-  String apName = "SensorNode-Setup-" + mac.substring(mac.length() - 6);
+  String apName = "SensorNode-Setup-" + macSuffix();
   WiFi.softAP(apName.c_str());
   IPAddress apIP = WiFi.softAPIP();
 

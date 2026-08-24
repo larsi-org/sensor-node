@@ -8,7 +8,9 @@ sensors.
 If the node can't connect to any of its known networks (nothing saved
 yet, or none in range), it opens an access point with a captive setup
 portal: pick a network from a live scan, enter the password, and set a
-device name, device id (0-15), write key, and log frequency
+device name (required -- defaults to `"Weather <last 6 MAC hex
+digits>"` when nothing's saved yet, so a fresh device never ships
+with a blank name), device id (0-15), write key, and log frequency
 (1, 2, 3, 5, 10, 15, 20, 30, or 60 minutes -- default 5). It saves
 the settings to flash (NVS) and reboots, then connects normally on
 every later boot.
