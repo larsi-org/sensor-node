@@ -55,15 +55,37 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   wire protocol (see `https://larsi.org/sensors/sensor-node.php` in the
   main site repo) and writes it as a raw HTTP/1.1 request directly to a
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
+  `log()` takes `SensorNodeReading[]` (`{value, decimalPlaces = 2}`,
+  the latter with a non-explicit single-arg constructor so a bare
+  float in the list still implicitly gets the default), not a plain
+  `float[]` -- added so each sketch can round to what its specific
+  sensor's datasheet actually backs up (`examples/BME280Node`: 1 place
+  for BME280 temp/dew-point/pressure, 0 for its ±3%RH humidity and the
+  MAX17048's ~±1% SOC) instead of the old flat 2-places-for-everything,
+  which over-reported precision the hardware didn't have. `log()`
+  itself stays sensor-agnostic -- it just carries whatever precision
+  the caller, who knows what's actually wired up, attaches to each
+  value.
   `provision()` posts the device name/id and a `channel_id,sensor,property,unit`
   list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)
-  to `/sensors/provision` -- safe to call every boot right after
-  `begin()`, before the first `log()`: server-side it's a non-empty
-  upsert (creates the row if missing, otherwise updates only the
-  fields this call actually sent a non-empty value for), not a pure
-  create-once. A blank `name=` never blanks out a device name set by
-  hand server-side, but a real device name/sensor/property/unit this
-  call reports does overwrite whatever was there. Both `log()` and
+  to `/sensors/provision` -- gated by `needsProvisioning()`
+  (`SensorNodeConfig`'s `provisionPending` NVS flag), not called
+  unconditionally every boot: it can't run from inside the portal
+  itself (the device isn't online as a station yet at that point), so
+  `handleSave()` just marks the flag and the sketch checks it after
+  the reboot's `begin()` reconnects -- `if (node.needsProvisioning())
+  node.provision(kChannels);`, right after `begin()`, before the first
+  `log()`. Server-side it's a non-empty upsert (creates the row if
+  missing, otherwise updates only the fields this call actually sent a
+  non-empty value for), not a pure create-once, which is what makes it
+  safe to call outside `needsProvisioning()` too if ever needed -- just
+  redundant once already confirmed. A blank `name=` never blanks out a
+  device name set by hand server-side, but a real device
+  name/sensor/property/unit this call reports does overwrite whatever
+  was there. A confirmed response (`"Provisioned"` in the body) clears
+  the pending flag; anything else (no connectivity, server error)
+  leaves it set so the next boot's `begin()` gets another attempt --
+  see `SensorNode::provision()`. Both `log()` and
   `provision()` share a `postToServer(path, body)` helper for the
   connect/write/read boilerplate. `sanitizeHostname()` derives the
   network hostname from `deviceName` (letters/digits/hyphens only,
@@ -82,8 +104,9 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   jobs, no second pin needed, same pattern as a router's reset button.
   This one method is the only thing extracted into the library so far
   from what was originally per-example boilerplate; `Serial.begin()`/
-  `delay(1000)` and the `provision()` call are left in each sketch on
-  purpose (baud rate and channel list are legitimately per-sketch).
+  `delay(1000)` and the `provision()` call (now gated on
+  `needsProvisioning()`) are left in each sketch on purpose (baud rate
+  and channel list are legitimately per-sketch).
   `checkPortalButton()` only runs once, at the top of `setup()` --
   holding the pin while the device is already looping does nothing;
   it has to be held through an actual reset (button press or power

@@ -40,8 +40,7 @@ const uint32_t kFirmwareVersion = 4;
 // Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
 // hPa, 15: battery state of charge % (SensorNodeBattery::kSocChannel --
 // reserved sitewide, see the library's README.md). See BasicNode.ino
-// for why this list is safe to leave in place permanently (provision()
-// semantics).
+// for when this actually gets posted (needsProvisioning()).
 const std::vector<SensorNodeChannel> kChannels = {
     {0, "BME280", "Temperature", "C"},
     {1, "BME280", "Dew Point Temperature", "C"},
@@ -49,6 +48,16 @@ const std::vector<SensorNodeChannel> kChannels = {
     {3, "BME280", "Pressure", "hPa"},
     {SensorNodeBattery::kSocChannel, "MAX17048", "State of Charge", "%"},
 };
+
+// Decimal places per channel, matching each sensor's actual accuracy rather than its raw
+// register resolution -- both chips report far more digits than their datasheet accuracy backs
+// up: BME280 is +-0.5C / +-3%RH / +-1hPa (temp/dew point/humidity/pressure), MAX17048 is
+// roughly +-1% SOC. Defined once and shared by both the log() call and the OLED text below, so
+// the two can't drift apart the way a second hardcoded printf precision could.
+const uint8_t kTempPrecision = 1;
+const uint8_t kHumidityPrecision = 0;
+const uint8_t kPressurePrecision = 1;
+const uint8_t kSocPrecision = 0;
 
 SensorNode node;
 BME280 bme;
@@ -61,7 +70,7 @@ void setup() {
   node.checkFirmwareVersion(kFirmwareVersion);
   node.checkPortalButton(kResetPin);
   node.begin();
-  node.provision(kChannels);
+  if (node.needsProvisioning()) node.provision(kChannels);
 
   const SensorNodeConfig &config = node.config();
   oledTitle = config.deviceName.length() > 0 ? config.deviceName : "sensor-node: BME280";
@@ -100,9 +109,9 @@ void loop() {
   // Channels 4-14 are unused on this node -- log() addresses each entry by
   // position (see SensorNode::log()), so they still need to be present as
   // NAN to hold channel 15's slot rather than shifting it down to 4.
-  node.log({ch0, ch1, ch2, ch3,
+  node.log({{ch0, kTempPrecision}, {ch1, kTempPrecision}, {ch2, kHumidityPrecision}, {ch3, kPressurePrecision},
             NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN,
-            ch15});
+            {ch15, kSocPrecision}});
 
   // "Current values" text screen -- entirely skipped if the OLED wasn't
   // detected at boot, so this is a no-op on a board with none wired up.
@@ -110,11 +119,13 @@ void loop() {
     oled.clearDisplay();
     oled.setCursor(0, 0);
     oled.println(oledTitle);
-    oled.printf("Temp:  %.1f C\n", ch0);
-    oled.printf("Dew:   %.1f C\n", ch1);
-    oled.printf("Humid: %.1f %%\n", ch2);
-    oled.printf("Press: %.1f hPa\n", ch3);
-    oled.printf("Batt:  %.1f %%\n", ch15);
+    // String(value, precision) here, not printf's %.Nf, so the displayed precision can't drift
+    // from what's actually sent to log() above -- both read the same kXPrecision constants.
+    oled.println("Temp:  " + String(ch0, kTempPrecision) + " C");
+    oled.println("Dew:   " + String(ch1, kTempPrecision) + " C");
+    oled.println("Humid: " + String(ch2, kHumidityPrecision) + " %");
+    oled.println("Press: " + String(ch3, kPressurePrecision) + " hPa");
+    oled.println("Batt:  " + String(ch15, kSocPrecision) + " %");
     oled.display();
   }
 

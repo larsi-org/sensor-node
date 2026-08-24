@@ -44,3 +44,21 @@ bool firmwareVersionChanged(uint32_t version);
 // because a mismatch was detected, so a reset while the portal sits open unconfigured doesn't
 // silently consume the pending visit.
 void markFirmwareVersionSeen(uint32_t version);
+
+// Whether the setup portal has saved settings since the last confirmed provision() call --
+// read-only, doesn't write anything. Set by markProvisionPending() (SensorNodePortal.cpp's
+// handleSave()), cleared by clearProvisionPending() (SensorNode::provision(), only on a
+// confirmed server response). A normal boot that just reconnects with already-known
+// credentials never touches either, so this stays false across it.
+bool provisionPending();
+
+// Marks that the portal just saved settings, so the next successful provision() should
+// actually run. Call this from handleSave(), after saveSensorNodeConfig() -- covers both a
+// brand-new device's first-ever setup and any later reconfiguration (device name, id, etc. may
+// have changed either way).
+void markProvisionPending();
+
+// Clears the pending flag. Call this only once provision() gets a confirmed response --
+// leaving it set on failure (no connectivity, server error, etc.) means the next boot tries
+// again instead of silently dropping the registration.
+void clearProvisionPending();

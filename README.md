@@ -66,7 +66,7 @@ const std::vector<SensorNodeChannel> kChannels = {{0, "BME280", "Temperature", "
 void setup() {
   Serial.begin(115200);
   node.begin();            // connects, or runs the setup portal if it can't
-  node.provision(kChannels);  // registers the device + channels (idempotent)
+  if (node.needsProvisioning()) node.provision(kChannels);  // only after a portal save
 }
 
 void loop() {
@@ -105,21 +105,35 @@ Library" libraries from the Library Manager.
   if `pin` reads high. Call once at the top of `setup()`, before
   `begin()` -- see `examples/BasicNode`/`examples/BME280Node` for the
   wiring (a button to GND).
+- `bool needsProvisioning() const` -- true if the setup portal saved
+  settings since the last confirmed `provision()` call. Gate
+  `provision()` on this instead of calling it every boot: a normal
+  reconnect-only boot has nothing new to register. Valid after
+  `begin()` returns.
 - `bool provision(const std::vector<SensorNodeChannel> &channels)` --
   registers this device and its channels with the server. Each
   `SensorNodeChannel` is `{id, sensor, property, unit}` (e.g.
   `{0, "BME280", "Temperature", "C"}`), fixed by what's wired to the sketch.
-  Safe to call every boot -- server-side it's a non-empty upsert:
-  creates the device/channel rows if missing, otherwise updates only
-  the fields this call sent a non-empty value for (so an empty
-  `name=` never blanks out one set by hand, but a real
-  name/sensor/property/unit does overwrite what was there). Call it
-  once after `begin()`, before the first `log()`.
-- `bool log(const std::vector<float> &values, int decimalPlaces = 2)`
-  -- posts one reading per channel, starting at this node's configured
-  device id. A `NAN` entry is left out of the request entirely, which
-  the log endpoint treats as "skip this channel" rather than logging a zero.
-  Returns whether the server confirmed the data was logged.
+  Server-side it's a non-empty upsert: creates the device/channel rows
+  if missing, otherwise updates only the fields this call sent a
+  non-empty value for (so an empty `name=` never blanks out one set by
+  hand, but a real name/sensor/property/unit does overwrite what was
+  there) -- so it's harmless to call outside `needsProvisioning()`
+  too, just redundant once already confirmed. Call it after `begin()`,
+  guarded by `needsProvisioning()`, before the first `log()`. Returns
+  true once the server confirms, which also clears
+  `needsProvisioning()`; a false return leaves it set so the next
+  boot's `begin()` gets another attempt.
+- `bool log(const std::vector<SensorNodeReading> &readings)` -- posts
+  one reading per channel, starting at this node's configured device
+  id. Each `SensorNodeReading` is `{value, decimalPlaces = 2}` -- a
+  plain float (e.g. `{ch0, ch1}`) implicitly takes the default
+  precision, or override per entry (e.g. `{ch0, 1}`) to match that
+  specific sensor's actual accuracy rather than its raw register
+  resolution -- see `examples/BME280Node`. A `NAN` value is left out of
+  the request entirely (its `decimalPlaces` is never read), which the
+  log endpoint treats as "skip this channel" rather than logging a
+  zero. Returns whether the server confirmed the data was logged.
 - `const SensorNodeConfig &config() const` -- read-only access to the
   loaded settings (`ssids`/`passwords` arrays, `deviceName`,
   `deviceId`, `writeKey`, `logIntervalMinutes`). Sketches read

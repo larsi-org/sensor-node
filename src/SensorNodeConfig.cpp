@@ -60,3 +60,25 @@ void markFirmwareVersionSeen(uint32_t version) {
   prefs.putUInt("fwVersion", version);
   prefs.end();
 }
+
+bool provisionPending() {
+  Preferences prefs;
+  prefs.begin(kNamespace, true);
+  bool pending = prefs.getBool("provPending", false);
+  prefs.end();
+  return pending;
+}
+
+void markProvisionPending() {
+  Preferences prefs;
+  prefs.begin(kNamespace, false);
+  prefs.putBool("provPending", true);
+  prefs.end();
+}
+
+void clearProvisionPending() {
+  Preferences prefs;
+  prefs.begin(kNamespace, false);
+  prefs.putBool("provPending", false);
+  prefs.end();
+}

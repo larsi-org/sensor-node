@@ -19,6 +19,22 @@ struct SensorNodeChannel {
   const char *unit;
 };
 
+// One channel's value for log() -- decimalPlaces defaults to 2 (the old
+// fixed behavior) but is meant to be set per entry to match that
+// specific sensor's real accuracy, not its raw register resolution: a
+// BME280 reading ±0.5C/±3%RH/±1hPa two decimal places past what the
+// datasheet actually backs up is false precision, and the MAX17048's
+// ~1% SOC accuracy backs up none at all. log() itself doesn't know
+// what's plugged in -- this is where the caller who does supplies it.
+// Ignored (and irrelevant) on a NAN entry, which log() omits entirely.
+struct SensorNodeReading {
+  float value;
+  uint8_t decimalPlaces;
+  // Not explicit: lets a plain float in a log() call (e.g. {ch0, ch1}) implicitly take the
+  // default precision, while {ch0, 1} still overrides it per entry.
+  SensorNodeReading(float value, uint8_t decimalPlaces = 2) : value(value), decimalPlaces(decimalPlaces) {}
+};
+
 class SensorNode {
  public:
   // Loads saved settings and tries each known network in turn
@@ -68,16 +84,26 @@ class SensorNode {
   void checkPortalButton(uint8_t pin, unsigned long wipeHoldMs = 5000);
 
   // Posts one reading per channel, addressed starting at this node's
-  // configured device id (channel deviceId*16 + index). A NAN entry
+  // configured device id (channel deviceId*16 + index). A NAN value
   // is omitted from the request, matching the log endpoint's "blank value"
-  // skip semantics. Returns true once the server confirms the data
-  // was logged.
-  bool log(const std::vector<float> &values, int decimalPlaces = 2);
+  // skip semantics -- its decimalPlaces is never read. Returns true
+  // once the server confirms the data was logged.
+  bool log(const std::vector<SensorNodeReading> &readings);
 
-  // Registers this device and its channels with the server -- safe to call every boot: the
-  // provision endpoint is a non-empty upsert, so an empty field here never overwrites a value
-  // set by hand server-side, but a real one does update the row. Call once after begin(),
-  // before the first log(). Returns true once the server confirms.
+  // True if the setup portal saved settings since the last confirmed provision() call -- gate
+  // provision() on this rather than calling it every boot (see examples/BasicNode): the portal
+  // is the only thing that changes what needs registering (device name/id, or a sketch update
+  // adding a channel), so a normal reconnect-only boot has nothing new to report. Valid after
+  // begin() returns.
+  bool needsProvisioning() const;
+
+  // Registers this device and its channels with the server. The provision endpoint is a
+  // non-empty upsert (an empty field here never overwrites a value set by hand server-side, but
+  // a real one does update the row), so it's harmless to call outside needsProvisioning() too --
+  // just redundant once already confirmed. Call after begin(), guarded by needsProvisioning(),
+  // before the first log(). Returns true once the server confirms, which also clears
+  // needsProvisioning() for next boot; a false return (no connectivity, server error) leaves it
+  // set so the next boot's begin() gets another attempt.
   bool provision(const std::vector<SensorNodeChannel> &channels);
 
   const SensorNodeConfig &config() const { return config_; }

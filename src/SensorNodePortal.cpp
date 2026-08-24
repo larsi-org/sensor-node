@@ -261,6 +261,7 @@ void handleSave() {
 
   saveSensorNodeConfig(config);
   if (pendingFirmwareVersion != 0) markFirmwareVersionSeen(pendingFirmwareVersion);
+  markProvisionPending();  // next begin()'s reconnect gets one provision() attempt -- see SensorNode.h
   server.send(200, "text/html", "<p>Saved. Rebooting...</p>");
   saved = true;
 }

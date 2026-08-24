@@ -33,10 +33,10 @@ const int kResetPin = 2;
 // access to the reset button. See checkFirmwareVersion().
 const uint32_t kFirmwareVersion = 1;
 
-// Matches the log() call below. Sent once at boot; the provision
-// endpoint is a non-empty upsert (updates a field with a real value,
-// leaves one that's empty alone), so this is safe to leave in place
-// permanently. Replace with the real channels for your sketch.
+// Matches the log() call below. Only actually posted when
+// needsProvisioning() is true (i.e. the setup portal just saved
+// settings) -- see setup() below. Replace with the real channels for
+// your sketch.
 const std::vector<SensorNodeChannel> kChannels = {
     {0, "YourSensor", "Temperature", "C"},
     {1, "YourSensor", "Humidity", "%"},
@@ -51,13 +51,16 @@ void setup() {
   node.checkFirmwareVersion(kFirmwareVersion);
   node.checkPortalButton(kResetPin);
   node.begin();
-  node.provision(kChannels);
+  if (node.needsProvisioning()) node.provision(kChannels);
 }
 
 void loop() {
   float temperatureC = 21.5;  // TODO: replace with a real sensor read
   float humidityPct = NAN;    // NAN skips this channel entirely
 
+  // Each entry defaults to 2 decimal places (SensorNodeReading) -- override per entry, e.g.
+  // {temperatureC, 1}, to match your real sensor's actual accuracy instead of over-reporting.
+  // See examples/BME280Node for a worked example.
   node.log({temperatureC, humidityPct});
   delay(node.config().logIntervalMinutes * 60UL * 1000);
 }

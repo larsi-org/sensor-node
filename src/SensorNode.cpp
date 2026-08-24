@@ -242,14 +242,14 @@ bool SensorNode::resolveServerIp() {
   return true;
 }
 
-bool SensorNode::log(const std::vector<float> &values, int decimalPlaces) {
+bool SensorNode::log(const std::vector<SensorNodeReading> &readings) {
   if (WiFi.status() != WL_CONNECTED) return false;
   if (!resolveServerIp()) return false;
 
   String data;
-  for (size_t i = 0; i < values.size(); i++) {
+  for (size_t i = 0; i < readings.size(); i++) {
     if (i > 0) data += ",";
-    if (!isnan(values[i])) data += String(values[i], decimalPlaces);
+    if (!isnan(readings[i].value)) data += String(readings[i].value, readings[i].decimalPlaces);
   }
 
   String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) + "&data=" + data;
@@ -259,6 +259,8 @@ bool SensorNode::log(const std::vector<float> &values, int decimalPlaces) {
 
   return response.indexOf("Data logged") >= 0;
 }
+
+bool SensorNode::needsProvisioning() const { return provisionPending(); }
 
 bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
   if (WiFi.status() != WL_CONNECTED) return false;
@@ -276,5 +278,7 @@ bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
 
   Serial.printf("[SensorNode] POST /sensors/provision:\n%s\n", response.c_str());
 
-  return response.indexOf("Provisioned") >= 0;
+  bool confirmed = response.indexOf("Provisioned") >= 0;
+  if (confirmed) clearProvisionPending();
+  return confirmed;
 }
