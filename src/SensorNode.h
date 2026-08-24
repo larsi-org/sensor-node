@@ -11,17 +11,21 @@
 // channel at), sensor is the physical hardware's model name (e.g.
 // "BME280", "DS18B20"), property/unit are short human labels (e.g.
 // "Temperature", "C") -- all stored server-side the first time this
-// channel is seen, then left alone. decimalPlaces defaults to 2 and
-// is never sent to provision() (which only reads id/sensor/property/
-// unit) -- it's here purely so a sketch has one place per channel to
-// hold both the identity provision() wants and the rounding log()/a
-// display want, instead of a second parallel list matched up by
-// position. See SensorNodeReading for the same field's role in log().
+// channel is seen, then left alone. label/decimalPlaces are never sent
+// to provision() (which only reads id/sensor/property/unit) -- they're
+// here purely so a sketch has one place per channel to hold both the
+// identity provision() wants and whatever log()/a display wants,
+// instead of a second parallel list matched up by position. label
+// defaults to "" (unused unless a sketch has a display -- property is
+// usually too long for one, e.g. "Dew Point Temperature" vs a 21-char
+// OLED line); decimalPlaces defaults to 2. See SensorNodeReading for
+// decimalPlaces's matching role in log().
 struct SensorNodeChannel {
   uint8_t id;
   const char *sensor;
   const char *property;
   const char *unit;
+  const char *label = "";
   uint8_t decimalPlaces = 2;
 };
 

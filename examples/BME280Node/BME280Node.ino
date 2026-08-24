@@ -41,22 +41,38 @@ const uint32_t kFirmwareVersion = 4;
 // hPa, 15: battery state of charge % (SensorNodeBattery::kSocChannel --
 // reserved sitewide, see the library's README.md). See BasicNode.ino
 // for when this actually gets posted (needsProvisioning()). Order matters beyond that: both
-// log() and the OLED text below index into this by position (kChannels[0].decimalPlaces,
-// kChannels[0].unit, etc.) instead of a second list, so it has to stay temp/dew point/humidity/
-// pressure/SOC in this order.
+// log() and format() (below, for the OLED) index into this by position (kChannels[0], etc.)
+// instead of a second list, so it has to stay temp/dew point/humidity/pressure/SOC in this order.
 //
-// decimalPlaces (trailing field, defaults to 2 if omitted -- see SensorNodeChannel) matches
-// each sensor's actual accuracy rather than its raw register resolution: both chips report far
-// more digits than their datasheet accuracy backs up -- BME280 is +-0.5C / +-3%RH / +-1hPa
-// (temp/dew point/humidity/pressure), MAX17048 is roughly +-1% SOC. provision() never reads
-// this field; it's here purely for log()/the OLED below to share.
+// label (short enough for the OLED -- property is meant for the server/reports and runs long,
+// e.g. "Dew Point Temperature") and decimalPlaces (matching each sensor's actual accuracy
+// rather than its raw register resolution -- both chips report far more digits than their
+// datasheet accuracy backs up: BME280 is +-0.5C / +-3%RH / +-1hPa temp/dew point/humidity/
+// pressure, MAX17048 is roughly +-1% SOC) are never read by provision(); they're here purely
+// for format()/log() below to share.
 const std::vector<SensorNodeChannel> kChannels = {
-    {0, "BME280", "Temperature", "C", 1},
-    {1, "BME280", "Dew Point Temperature", "C", 1},
-    {2, "BME280", "Relative Humidity", "%", 0},
-    {3, "BME280", "Pressure", "hPa", 1},
-    {SensorNodeBattery::kSocChannel, "MAX17048", "State of Charge", "%", 0},
+    {0, "BME280", "Temperature", "C", "Temp", 1},
+    {1, "BME280", "Dew Point Temperature", "C", "Dew", 1},
+    {2, "BME280", "Relative Humidity", "%", "Humid", 0},
+    {3, "BME280", "Pressure", "hPa", "Press", 1},
+    {SensorNodeBattery::kSocChannel, "MAX17048", "State of Charge", "%", "Batt", 0},
 };
+
+// Builds one OLED line, e.g. "Temp:  21.5 C", from kChannels[channelIndex]'s label/
+// decimalPlaces/unit -- the label:value:unit format and column alignment (kLabelColumnWidth,
+// matching the old hand-aligned "Temp:  "/"Dew:   "/etc.) live here once instead of being
+// repeated per line.
+const size_t kLabelColumnWidth = 7;
+
+String format(float value, size_t channelIndex) {
+  const SensorNodeChannel &channel = kChannels[channelIndex];
+  String label = String(channel.label) + ":";
+  while (label.length() < kLabelColumnWidth) label += " ";
+  // (unsigned int) cast: ESP32 core's String(float, unsigned int) is otherwise ambiguous
+  // against its other explicit String(..., unsigned char) overloads when given a uint8_t
+  // directly -- neither is a strictly better match across both arguments.
+  return label + String(value, (unsigned int)channel.decimalPlaces) + " " + channel.unit;
+}
 
 SensorNode node;
 BME280 bme;
@@ -119,17 +135,14 @@ void loop() {
     oled.clearDisplay();
     oled.setCursor(0, 0);
     oled.println(oledTitle);
-    // String(value, precision) + kChannels[i].unit here, not printf's %.Nf plus a hardcoded
-    // "C"/"%"/"hPa", so the displayed precision/unit can't drift from what log() above and
-    // provision() actually use -- all three read the same kChannels row. The (unsigned int)
-    // cast matches ESP32 core's String(float, unsigned int) constructor exactly; a uint8_t
-    // straight from kChannels[i].decimalPlaces is otherwise ambiguous against WString.h's other
-    // explicit String(..., unsigned char) overloads.
-    oled.println("Temp:  " + String(ch0, (unsigned int)kChannels[0].decimalPlaces) + " " + kChannels[0].unit);
-    oled.println("Dew:   " + String(ch1, (unsigned int)kChannels[1].decimalPlaces) + " " + kChannels[1].unit);
-    oled.println("Humid: " + String(ch2, (unsigned int)kChannels[2].decimalPlaces) + " " + kChannels[2].unit);
-    oled.println("Press: " + String(ch3, (unsigned int)kChannels[3].decimalPlaces) + " " + kChannels[3].unit);
-    oled.println("Batt:  " + String(ch15, (unsigned int)kChannels[4].decimalPlaces) + " " + kChannels[4].unit);
+    // format() (above) reads label/decimalPlaces/unit straight from kChannels, so the OLED
+    // can't drift from what log() above and provision() actually use -- all three read the same
+    // row.
+    oled.println(format(ch0, 0));
+    oled.println(format(ch1, 1));
+    oled.println(format(ch2, 2));
+    oled.println(format(ch3, 3));
+    oled.println(format(ch15, 4));
     oled.display();
   }
 
