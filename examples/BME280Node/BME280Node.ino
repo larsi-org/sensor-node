@@ -40,9 +40,9 @@ const uint32_t kFirmwareVersion = 4;
 // Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
 // hPa, 15: battery state of charge % (SensorNodeBattery::kSocChannel --
 // reserved sitewide, see the library's README.md). See BasicNode.ino
-// for when this actually gets posted (needsProvisioning()). Order matters beyond that: both
-// log() and format() (below, for the OLED) index into this by position (kChannels[0], etc.)
-// instead of a second list, so it has to stay temp/dew point/humidity/pressure/SOC in this order.
+// for when this actually gets posted (needsProvisioning()). format() (below, for the OLED)
+// indexes into this by position, so it has to stay temp/dew point/humidity/pressure/SOC in
+// this order; log() below addresses by id instead, so it doesn't care about the order here.
 //
 // label (short enough for the OLED -- property is meant for the server/reports and runs long,
 // e.g. "Dew Point Temperature") and decimalPlaces (matching each sensor's actual accuracy
@@ -121,13 +121,10 @@ void loop() {
   float ch1 = bme.dewPointC();                 // dew point C
   float ch15 = battery.readSOC();               // battery state of charge %
 
-  // Channels 4-14 are unused on this node -- log() addresses each entry by
-  // position (see SensorNode::log()), so they still need to be present as
-  // NAN to hold channel 15's slot rather than shifting it down to 4.
-  node.log({{ch0, kChannels[0].decimalPlaces}, {ch1, kChannels[1].decimalPlaces},
-            {ch2, kChannels[2].decimalPlaces}, {ch3, kChannels[3].decimalPlaces},
-            NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN,
-            {ch15, kChannels[4].decimalPlaces}});
+  // Each SensorNodeReading's id picks its decimalPlaces out of kChannels -- no need to pad
+  // channels 4-14 by hand, log() fills the gap up to channel 15 itself.
+  node.log(kChannels, {{ch0, 0}, {ch1, 1}, {ch2, 2}, {ch3, 3},
+                        {ch15, SensorNodeBattery::kSocChannel}});
 
   // "Current values" text screen -- entirely skipped if the OLED wasn't
   // detected at boot, so this is a no-op on a board with none wired up.

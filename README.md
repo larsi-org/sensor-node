@@ -71,7 +71,7 @@ void setup() {
 
 void loop() {
   float temperatureC = readTemperature();
-  node.log({temperatureC});
+  node.log(kChannels, {{temperatureC, 0}});
   delay(node.config().logIntervalMinutes * 60UL * 1000);  // set via the portal
 }
 ```
@@ -129,16 +129,20 @@ Library" libraries from the Library Manager.
   true once the server confirms, which also clears
   `needsProvisioning()`; a false return leaves it set so the next
   boot's `begin()` gets another attempt.
-- `bool log(const std::vector<SensorNodeReading> &readings)` -- posts
-  one reading per channel, starting at this node's configured device
-  id. Each `SensorNodeReading` is `{value, decimalPlaces = 2}` -- a
-  plain float (e.g. `{ch0, ch1}`) implicitly takes the default
-  precision, or override per entry (e.g. `{ch0, 1}`) to match that
-  specific sensor's actual accuracy rather than its raw register
-  resolution -- see `examples/BME280Node`. A `NAN` value is left out of
-  the request entirely (its `decimalPlaces` is never read), which the
-  log endpoint treats as "skip this channel" rather than logging a
-  zero. Returns whether the server confirmed the data was logged.
+- `bool log(const std::vector<SensorNodeChannel> &channels, const std::vector<SensorNodeReading> &readings)`
+  -- posts readings, addressed within this node's configured device id
+  by each `SensorNodeReading`'s `id` (`{value, id}`, e.g. `{ch0, 0}`)
+  -- not its position in `readings`. `channels` (typically the same
+  list passed to `provision()`) supplies each `id`'s `decimalPlaces`
+  (defaults to 2 if that `id` isn't found there), so it doesn't have to
+  be repeated per reading, and `readings` only needs an entry for a
+  channel actually being reported this call -- `log()` fills any lower,
+  unmentioned ids in between with a skipped value itself, matching the
+  log endpoint's position-addressed wire format (no more hand-padding
+  `NAN`s up to a gap like channel 15 -- see `examples/BME280Node`). A
+  `NAN` value is left out of the request entirely, which the log
+  endpoint treats as "skip this channel" rather than logging a zero.
+  Returns whether the server confirmed the data was logged.
 - `const SensorNodeConfig &config() const` -- read-only access to the
   loaded settings (`ssids`/`passwords` arrays, `deviceName`,
   `deviceId`, `writeKey`, `logIntervalMinutes`). Sketches read

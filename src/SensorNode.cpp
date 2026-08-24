@@ -242,17 +242,40 @@ bool SensorNode::resolveServerIp() {
   return true;
 }
 
-bool SensorNode::log(const std::vector<SensorNodeReading> &readings) {
+bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::vector<SensorNodeReading> &readings) {
   if (WiFi.status() != WL_CONNECTED) return false;
   if (!resolveServerIp()) return false;
 
+  // Channels 0-15 -- see SensorNodeChannel's id comment. Laid out sparsely by id here (not by
+  // position within readings/channels) so the loop below can serialize them in wire order
+  // regardless of what order the caller listed them in.
+  const uint8_t kMaxChannels = 16;
+  float values[kMaxChannels];
+  uint8_t decimalPlaces[kMaxChannels];
+  for (uint8_t id = 0; id < kMaxChannels; id++) values[id] = NAN;
+
+  uint8_t highestId = 0;
+  for (const SensorNodeReading &reading : readings) {
+    if (reading.id >= kMaxChannels) continue;  // shouldn't happen; guards a bad id
+    values[reading.id] = reading.value;
+    if (reading.id > highestId) highestId = reading.id;
+
+    decimalPlaces[reading.id] = 2;  // default if id isn't found in channels below
+    for (const SensorNodeChannel &channel : channels) {
+      if (channel.id == reading.id) {
+        decimalPlaces[reading.id] = channel.decimalPlaces;
+        break;
+      }
+    }
+  }
+
   String data;
-  for (size_t i = 0; i < readings.size(); i++) {
-    if (i > 0) data += ",";
+  for (uint8_t id = 0; id <= highestId; id++) {
+    if (id > 0) data += ",";
     // (unsigned int) cast: ESP32 core's String(float, unsigned int) is otherwise ambiguous
     // against its other explicit String(..., unsigned char) overloads when given a uint8_t
     // directly -- neither is a strictly better match across both arguments.
-    if (!isnan(readings[i].value)) data += String(readings[i].value, (unsigned int)readings[i].decimalPlaces);
+    if (!isnan(values[id])) data += String(values[id], (unsigned int)decimalPlaces[id]);
   }
 
   String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) + "&data=" + data;

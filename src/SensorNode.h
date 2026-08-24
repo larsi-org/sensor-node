@@ -6,20 +6,17 @@
 
 #include "SensorNodeConfig.h"
 
-// One channel's identity for provision() -- id is the 0-15 offset
-// within this device (matches the position log() addresses that
-// channel at), sensor is the physical hardware's model name (e.g.
-// "BME280", "DS18B20"), property/unit are short human labels (e.g.
-// "Temperature", "C") -- all stored server-side the first time this
-// channel is seen, then left alone. label/decimalPlaces are never sent
-// to provision() (which only reads id/sensor/property/unit) -- they're
-// here purely so a sketch has one place per channel to hold both the
-// identity provision() wants and whatever log()/a display wants,
-// instead of a second parallel list matched up by position. label
-// defaults to "" (unused unless a sketch has a display -- property is
-// usually too long for one, e.g. "Dew Point Temperature" vs a 21-char
-// OLED line); decimalPlaces defaults to 2. See SensorNodeReading for
-// decimalPlaces's matching role in log().
+// One channel's identity, shared by provision() and log() -- id is the 0-15 offset within
+// this device (channel deviceId*16 + id is what the server actually addresses), sensor is the
+// physical hardware's model name (e.g. "BME280", "DS18B20"), property/unit are short human
+// labels (e.g. "Temperature", "C") -- all stored server-side the first time this channel is
+// seen, then left alone. label/decimalPlaces are never sent to provision() (which only reads
+// id/sensor/property/unit) -- log() reads decimalPlaces to format each SensorNodeReading (see
+// below); label is unused by this library at all, it's just there so a sketch with a display
+// has one place per channel to hold a short form of property (which is meant for the
+// server/reports and can run long, e.g. "Dew Point Temperature" vs. a 21-char OLED line).
+// Both default (label to "", decimalPlaces to 2) so a sketch that doesn't care about either
+// can leave them unset.
 struct SensorNodeChannel {
   uint8_t id;
   const char *sensor;
@@ -29,20 +26,16 @@ struct SensorNodeChannel {
   uint8_t decimalPlaces = 2;
 };
 
-// One channel's value for log() -- decimalPlaces defaults to 2 (the old
-// fixed behavior) but is meant to be set per entry to match that
-// specific sensor's real accuracy, not its raw register resolution: a
-// BME280 reading ±0.5C/±3%RH/±1hPa two decimal places past what the
-// datasheet actually backs up is false precision, and the MAX17048's
-// ~1% SOC accuracy backs up none at all. log() itself doesn't know
-// what's plugged in -- this is where the caller who does supplies it.
-// Ignored (and irrelevant) on a NAN entry, which log() omits entirely.
+// One value for log() -- id is the channel it belongs to (matches the id in the
+// SensorNodeChannel passed to the same log() call, not that channel's position within the
+// list), value is NAN to skip this channel entirely (matching the log endpoint's "blank value"
+// skip semantics). log() looks up id's decimalPlaces from the SensorNodeChannel list itself
+// (defaulting to 2 if id isn't found there), so unlike provision()'s SensorNodeChannel list,
+// this one only needs an entry for a channel that's actually being reported this call --
+// there's no need to pad out ids in between with anything.
 struct SensorNodeReading {
   float value;
-  uint8_t decimalPlaces;
-  // Not explicit: lets a plain float in a log() call (e.g. {ch0, ch1}) implicitly take the
-  // default precision, while {ch0, 1} still overrides it per entry.
-  SensorNodeReading(float value, uint8_t decimalPlaces = 2) : value(value), decimalPlaces(decimalPlaces) {}
+  uint8_t id;
 };
 
 class SensorNode {
@@ -93,12 +86,14 @@ class SensorNode {
   // GND).
   void checkPortalButton(uint8_t pin, unsigned long wipeHoldMs = 5000);
 
-  // Posts one reading per channel, addressed starting at this node's
-  // configured device id (channel deviceId*16 + index). A NAN value
-  // is omitted from the request, matching the log endpoint's "blank value"
-  // skip semantics -- its decimalPlaces is never read. Returns true
-  // once the server confirms the data was logged.
-  bool log(const std::vector<SensorNodeReading> &readings);
+  // Posts readings, addressed by each SensorNodeReading's id within this node's configured
+  // device id (channel deviceId*16 + id). channels supplies each id's decimalPlaces (defaults
+  // to 2 if a reading's id isn't found there) -- typically the same list passed to provision().
+  // readings only needs an entry per id actually being reported this call; log() fills any
+  // lower, unmentioned ids in between with a skipped (blank) value itself, matching the log
+  // endpoint's position-addressed wire format. Returns true once the server confirms the data
+  // was logged.
+  bool log(const std::vector<SensorNodeChannel> &channels, const std::vector<SensorNodeReading> &readings);
 
   // True if the setup portal saved settings since the last confirmed provision() call -- gate
   // provision() on this rather than calling it every boot (see examples/BasicNode): the portal

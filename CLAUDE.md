@@ -55,30 +55,41 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   wire protocol (see `https://larsi.org/sensors/sensor-node.php` in the
   main site repo) and writes it as a raw HTTP/1.1 request directly to a
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
-  `log()` takes `SensorNodeReading[]` (`{value, decimalPlaces = 2}`,
-  the latter with a non-explicit single-arg constructor so a bare
-  float in the list still implicitly gets the default), not a plain
-  `float[]` -- added so each sketch can round to what its specific
-  sensor's datasheet actually backs up (`examples/BME280Node`: 1 place
-  for BME280 temp/dew-point/pressure, 0 for its ±3%RH humidity and the
-  MAX17048's ~±1% SOC) instead of the old flat 2-places-for-everything,
-  which over-reported precision the hardware didn't have. `log()`
-  itself stays sensor-agnostic -- it just carries whatever precision
-  the caller, who knows what's actually wired up, attaches to each
-  value.
+  `log()` takes `(SensorNodeChannel[], SensorNodeReading[])`, not a
+  plain `float[]`. `SensorNodeReading` is `{value, id}` -- `id` is the
+  channel it belongs to, not its position in the list, so `readings`
+  only needs an entry per channel actually being reported this call.
+  Internally `log()` builds its own `float[16]`/`decimalPlaces[16]`
+  (NaN-filled, id-indexed) from `readings`, looking up each id's
+  `decimalPlaces` from `channels` (a short linear scan -- channels
+  tops out at 16 entries, so no real cost) and defaulting to 2 if that
+  id isn't in there, then serializes id `0` through the highest id
+  actually used. That's what lets a sketch skip hand-padding `NAN`s up
+  to a gap like channel 15 (`examples/BME280Node`:
+  `node.log(kChannels, {{ch0, 0}, {ch1, 1}, {ch2, 2}, {ch3, 3}, {ch15,
+  SensorNodeBattery::kSocChannel}})` -- no channels 4-14 to write out
+  by hand) -- added because the previous flat-`float[]` version needed
+  a NaN placeholder for every unused id below the highest one used, a
+  footgun (easy to miscount) on top of needing the caller to repeat
+  each id's precision at the call site instead of reading it from
+  `channels` once. `channels` is typically the same list passed to
+  `provision()`, but doesn't have to match exactly -- `log()` only
+  reads it for `decimalPlaces` lookups, so an id it can't find just
+  falls back to the default.
   `SensorNodeChannel` also carries `label = ""` and `decimalPlaces = 2`
-  (the latter matching `SensorNodeReading`'s) -- `provision()` never
-  reads either (only `id`/`sensor`/`property`/`unit` go on the wire),
-  they exist so a sketch's one per-channel table can feed both
-  `provision()`'s identity and `log()`/a display's formatting
-  (`examples/BME280Node`: `kChannels[i].label`,
+  -- `provision()` never reads either (only `id`/`sensor`/`property`/
+  `unit` go on the wire), they exist so a sketch's one per-channel
+  table can feed both `provision()`'s identity and `log()`/a display's
+  formatting (`examples/BME280Node`: `kChannels[i].label`,
   `kChannels[i].decimalPlaces`, `kChannels[i].unit`, all read by a
-  local `format(value, channelIndex)` helper that builds one OLED line)
-  instead of a second list kept in sync by hand at the same index.
-  `label` exists separately from `property` because `property` is
-  meant for the server/reports and can run long (`"Dew Point
-  Temperature"`), too long for the 128x64 OLED's default-font grid
-  (21 columns x 8 rows at `setTextSize(1)`).
+  local `format(value, channelIndex)` helper that builds one OLED
+  line, indexing by *position* there rather than id since it's just
+  walking the same small list top to bottom) instead of a second list
+  kept in sync by hand at the same index. `label` exists separately
+  from `property` because `property` is meant for the server/reports
+  and can run long (`"Dew Point Temperature"`), too long for the
+  128x64 OLED's default-font grid (21 columns x 8 rows at
+  `setTextSize(1)`).
   `provision()` posts the device name/id and a `channel_id,sensor,property,unit`
   list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)
   to `/sensors/provision` -- gated by `needsProvisioning()`
