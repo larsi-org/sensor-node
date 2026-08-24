@@ -249,7 +249,10 @@ bool SensorNode::log(const std::vector<SensorNodeReading> &readings) {
   String data;
   for (size_t i = 0; i < readings.size(); i++) {
     if (i > 0) data += ",";
-    if (!isnan(readings[i].value)) data += String(readings[i].value, readings[i].decimalPlaces);
+    // (unsigned int) cast: ESP32 core's String(float, unsigned int) is otherwise ambiguous
+    // against its other explicit String(..., unsigned char) overloads when given a uint8_t
+    // directly -- neither is a strictly better match across both arguments.
+    if (!isnan(readings[i].value)) data += String(readings[i].value, (unsigned int)readings[i].decimalPlaces);
   }
 
   String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) + "&data=" + data;

@@ -54,10 +54,15 @@ const std::vector<SensorNodeChannel> kChannels = {
 // up: BME280 is +-0.5C / +-3%RH / +-1hPa (temp/dew point/humidity/pressure), MAX17048 is
 // roughly +-1% SOC. Defined once and shared by both the log() call and the OLED text below, so
 // the two can't drift apart the way a second hardcoded printf precision could.
-const uint8_t kTempPrecision = 1;
-const uint8_t kHumidityPrecision = 0;
-const uint8_t kPressurePrecision = 1;
-const uint8_t kSocPrecision = 0;
+// unsigned int, not uint8_t: matches ESP32 core's String(float, unsigned int) constructor
+// exactly for the OLED lines below -- a uint8_t here is ambiguous against WString.h's other
+// explicit String(..., unsigned char) overloads (ties on "one exact arg, one converted arg" in
+// opposite positions). SensorNodeReading::decimalPlaces still narrows this to uint8_t for the
+// log() calls, which is a plain (non-overloaded) implicit conversion, so that's fine as-is.
+const unsigned int kTempPrecision = 1;
+const unsigned int kHumidityPrecision = 0;
+const unsigned int kPressurePrecision = 1;
+const unsigned int kSocPrecision = 0;
 
 SensorNode node;
 BME280 bme;
