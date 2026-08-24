@@ -55,41 +55,42 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   wire protocol (see `https://larsi.org/sensors/sensor-node.php` in the
   main site repo) and writes it as a raw HTTP/1.1 request directly to a
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
-  `log()` takes `(SensorNodeChannel[], SensorNodeReading[])`, not a
-  plain `float[]`. `SensorNodeReading` is `{value, id}` -- `id` is the
-  channel it belongs to, not its position in the list, so `readings`
-  only needs an entry per channel actually being reported this call.
-  Internally `log()` builds its own `float[16]`/`decimalPlaces[16]`
-  (NaN-filled, id-indexed) from `readings`, looking up each id's
-  `decimalPlaces` from `channels` (a short linear scan -- channels
-  tops out at 16 entries, so no real cost) and defaulting to 2 if that
-  id isn't in there, then serializes id `0` through the highest id
-  actually used. That's what lets a sketch skip hand-padding `NAN`s up
-  to a gap like channel 15 (`examples/BME280Node`:
-  `node.log(kChannels, {{ch0, 0}, {ch1, 1}, {ch2, 2}, {ch3, 3}, {ch15,
-  SensorNodeBattery::kSocChannel}})` -- no channels 4-14 to write out
-  by hand) -- added because the previous flat-`float[]` version needed
-  a NaN placeholder for every unused id below the highest one used, a
-  footgun (easy to miscount) on top of needing the caller to repeat
-  each id's precision at the call site instead of reading it from
-  `channels` once. `channels` is typically the same list passed to
-  `provision()`, but doesn't have to match exactly -- `log()` only
-  reads it for `decimalPlaces` lookups, so an id it can't find just
-  falls back to the default.
+  `log()` takes `(SensorNodeChannel[], float[])`, not just a plain
+  `float[]`. `values` is zipped *positionally* against `channels`
+  (`values[i]` is `channels[i]`'s reading) -- not matched up by id --
+  so it can pick up each entry's `id` (for wire position) and
+  `decimalPlaces` (for rounding) straight from the matching
+  `SensorNodeChannel` instead of the caller repeating either at the
+  call site. Internally `log()` builds its own `float[16]`/
+  `decimalPlaces[16]` (NaN-filled, id-indexed) from the zip, then
+  serializes id `0` through the highest id actually used -- that's
+  what lets a sketch skip hand-padding `NAN`s up to a gap like channel
+  15 (`examples/BME280Node`: `node.log(kChannels, {ch0, ch1, ch2, ch3,
+  ch15})` -- no channels 4-14 to write out by hand). `values` can also
+  be shorter than `channels`, to report only the first several without
+  slicing `channels` itself. The zip being positional (not id-keyed)
+  is a real trade -- reordering `channels` without updating every
+  `values` list built against it would silently misfile a reading onto
+  the wrong channel, not just look wrong somewhere -- but it's the
+  same trade already made for the OLED's `printReadings()` (below), so
+  this doesn't introduce a new kind of fragility, just extends the
+  existing one from display-only to the actual logged data. `channels`
+  is typically the same list passed to `provision()`, but doesn't have
+  to match exactly -- `log()` only reads it for `id`/`decimalPlaces`
+  lookups.
   `SensorNodeChannel` also carries `label = ""` and `decimalPlaces = 2`
   -- `provision()` never reads either (only `id`/`sensor`/`property`/
   `unit` go on the wire), they exist so a sketch's one per-channel
   table can feed both `provision()`'s identity and `log()`/a display's
   formatting (`examples/BME280Node`: `kChannels[i].label`,
   `kChannels[i].decimalPlaces`, `kChannels[i].unit`, all read by a
-  local `format(value, channelIndex)` helper that builds one OLED
-  line, indexing by *position* there rather than id since it's just
-  walking the same small list top to bottom) instead of a second list
-  kept in sync by hand at the same index. `label` exists separately
-  from `property` because `property` is meant for the server/reports
-  and can run long (`"Dew Point Temperature"`), too long for the
-  128x64 OLED's default-font grid (21 columns x 8 rows at
-  `setTextSize(1)`).
+  local `printReadings(values)` helper that walks `values` zipped
+  against `kChannels` the same way `log()` does, printing one OLED
+  line per entry) instead of a second list kept in sync by hand at the
+  same index. `label` exists separately from `property` because
+  `property` is meant for the server/reports and can run long
+  (`"Dew Point Temperature"`), too long for the 128x64 OLED's
+  default-font grid (21 columns x 8 rows at `setTextSize(1)`).
   `provision()` posts the device name/id and a `channel_id,sensor,property,unit`
   list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)
   to `/sensors/provision` -- gated by `needsProvisioning()`

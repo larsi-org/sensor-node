@@ -34,7 +34,8 @@ const int kResetPin = 2;
 const uint32_t kFirmwareVersion = 1;
 
 // Shared by provision() (only actually posted when needsProvisioning() is true -- see setup()
-// below) and log() (which reads each id's decimalPlaces from here -- add a trailing precision,
+// below) and log() (zipped positionally against the values list there -- kChannels[0] has to
+// stay temperature, kChannels[1] humidity, matching the order below; add a trailing precision,
 // e.g. {0, "YourSensor", "Temperature", "C", "", 1}, to match your real sensor's actual
 // accuracy instead of the default 2). Replace with the real channels for your sketch.
 const std::vector<SensorNodeChannel> kChannels = {
@@ -58,6 +59,6 @@ void loop() {
   float temperatureC = 21.5;  // TODO: replace with a real sensor read
   float humidityPct = NAN;    // NAN skips this channel entirely
 
-  node.log(kChannels, {{temperatureC, 0}, {humidityPct, 1}});
+  node.log(kChannels, {temperatureC, humidityPct});
   delay(node.config().logIntervalMinutes * 60UL * 1000);
 }

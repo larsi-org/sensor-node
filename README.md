@@ -71,7 +71,7 @@ void setup() {
 
 void loop() {
   float temperatureC = readTemperature();
-  node.log(kChannels, {{temperatureC, 0}});
+  node.log(kChannels, {temperatureC});
   delay(node.config().logIntervalMinutes * 60UL * 1000);  // set via the portal
 }
 ```
@@ -117,9 +117,8 @@ Library" libraries from the Library Manager.
   wired to the sketch. `label`/`decimalPlaces` are never sent to the
   server -- `provision()` only reads `id`/`sensor`/`property`/`unit` --
   they're there so a sketch can pull the same per-channel short label
-  and precision into a display (e.g. `kChannels[0].label`,
-  `kChannels[0].decimalPlaces`) and `log()` instead of keeping a
-  second list. Server-side it's a non-empty upsert: creates the device/channel rows
+  and precision into a display and `log()` (see below) instead of
+  keeping a second list. Server-side it's a non-empty upsert: creates the device/channel rows
   if missing, otherwise updates only the fields this call sent a
   non-empty value for (so an empty `name=` never blanks out one set by
   hand, but a real name/sensor/property/unit does overwrite what was
@@ -129,20 +128,24 @@ Library" libraries from the Library Manager.
   true once the server confirms, which also clears
   `needsProvisioning()`; a false return leaves it set so the next
   boot's `begin()` gets another attempt.
-- `bool log(const std::vector<SensorNodeChannel> &channels, const std::vector<SensorNodeReading> &readings)`
-  -- posts readings, addressed within this node's configured device id
-  by each `SensorNodeReading`'s `id` (`{value, id}`, e.g. `{ch0, 0}`)
-  -- not its position in `readings`. `channels` (typically the same
-  list passed to `provision()`) supplies each `id`'s `decimalPlaces`
-  (defaults to 2 if that `id` isn't found there), so it doesn't have to
-  be repeated per reading, and `readings` only needs an entry for a
-  channel actually being reported this call -- `log()` fills any lower,
-  unmentioned ids in between with a skipped value itself, matching the
-  log endpoint's position-addressed wire format (no more hand-padding
-  `NAN`s up to a gap like channel 15 -- see `examples/BME280Node`). A
-  `NAN` value is left out of the request entirely, which the log
-  endpoint treats as "skip this channel" rather than logging a zero.
-  Returns whether the server confirmed the data was logged.
+- `bool log(const std::vector<SensorNodeChannel> &channels, const std::vector<float> &values)`
+  -- posts `values`, zipped positionally against `channels`: `values[0]`
+  is `channels[0]`'s reading, `values[1]` is `channels[1]`'s, and so on
+  -- **not** matched up by id, so reordering `channels` without
+  updating every `values` list built against it would silently misfile
+  a reading onto the wrong channel. Each entry uses its `channels[i]`'s
+  `id` (for wire position, within this node's configured device id)
+  and `decimalPlaces` (for rounding) -- `channels` is typically the
+  same list passed to `provision()`. `values` can be shorter than
+  `channels` to report only the first several (e.g.
+  `node.log(kChannels, {ch0, ch1})` to skip channels 2+ some call) --
+  `log()` fills any lower, unmentioned ids in between with a skipped
+  value itself, matching the log endpoint's position-addressed wire
+  format (no more hand-padding `NAN`s up to a gap like channel 15 --
+  see `examples/BME280Node`). A `NAN` value is left out of the request
+  entirely, which the log endpoint treats as "skip this channel"
+  rather than logging a zero. Returns whether the server confirmed the
+  data was logged.
 - `const SensorNodeConfig &config() const` -- read-only access to the
   loaded settings (`ssids`/`passwords` arrays, `deviceName`,
   `deviceId`, `writeKey`, `logIntervalMinutes`). Sketches read
