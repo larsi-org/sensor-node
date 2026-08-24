@@ -40,7 +40,10 @@ const uint32_t kFirmwareVersion = 4;
 // Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
 // hPa, 15: battery state of charge % (SensorNodeBattery::kSocChannel --
 // reserved sitewide, see the library's README.md). See BasicNode.ino
-// for when this actually gets posted (needsProvisioning()).
+// for when this actually gets posted (needsProvisioning()). Order matters beyond that: the
+// OLED text below indexes into this by position (kChannels[0].unit, etc.) rather than
+// duplicating "C"/"%"/"hPa" a second time, so it has to stay temp/dew point/humidity/
+// pressure/SOC in this order.
 const std::vector<SensorNodeChannel> kChannels = {
     {0, "BME280", "Temperature", "C"},
     {1, "BME280", "Dew Point Temperature", "C"},
@@ -125,12 +128,13 @@ void loop() {
     oled.setCursor(0, 0);
     oled.println(oledTitle);
     // String(value, precision) here, not printf's %.Nf, so the displayed precision can't drift
-    // from what's actually sent to log() above -- both read the same kXPrecision constants.
-    oled.println("Temp:  " + String(ch0, kTempPrecision) + " C");
-    oled.println("Dew:   " + String(ch1, kTempPrecision) + " C");
-    oled.println("Humid: " + String(ch2, kHumidityPrecision) + " %");
-    oled.println("Press: " + String(ch3, kPressurePrecision) + " hPa");
-    oled.println("Batt:  " + String(ch15, kSocPrecision) + " %");
+    // from what's actually sent to log() above -- both read the same kXPrecision constants. Unit
+    // comes from kChannels rather than a third hardcoded "C"/"%"/"hPa" copy, for the same reason.
+    oled.println("Temp:  " + String(ch0, kTempPrecision) + " " + kChannels[0].unit);
+    oled.println("Dew:   " + String(ch1, kTempPrecision) + " " + kChannels[1].unit);
+    oled.println("Humid: " + String(ch2, kHumidityPrecision) + " " + kChannels[2].unit);
+    oled.println("Press: " + String(ch3, kPressurePrecision) + " " + kChannels[3].unit);
+    oled.println("Batt:  " + String(ch15, kSocPrecision) + " " + kChannels[4].unit);
     oled.display();
   }
 
