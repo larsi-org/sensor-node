@@ -112,8 +112,12 @@ Library" libraries from the Library Manager.
   `begin()` returns.
 - `bool provision(const std::vector<SensorNodeChannel> &channels)` --
   registers this device and its channels with the server. Each
-  `SensorNodeChannel` is `{id, sensor, property, unit}` (e.g.
-  `{0, "BME280", "Temperature", "C"}`), fixed by what's wired to the sketch.
+  `SensorNodeChannel` is `{id, sensor, property, unit, decimalPlaces = 2}`
+  (e.g. `{0, "BME280", "Temperature", "C", 1}`), fixed by what's wired to
+  the sketch. `decimalPlaces` is never sent to the server -- `provision()`
+  only reads `id`/`sensor`/`property`/`unit` -- it's there so a sketch
+  can pull the same per-channel precision into `log()` and a display
+  (e.g. `kChannels[0].decimalPlaces`) instead of keeping a second list.
   Server-side it's a non-empty upsert: creates the device/channel rows
   if missing, otherwise updates only the fields this call sent a
   non-empty value for (so an empty `name=` never blanks out one set by

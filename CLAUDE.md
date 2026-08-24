@@ -66,6 +66,13 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   itself stays sensor-agnostic -- it just carries whatever precision
   the caller, who knows what's actually wired up, attaches to each
   value.
+  `SensorNodeChannel` also carries a `decimalPlaces = 2` field, matching
+  `SensorNodeReading`'s -- `provision()` never reads it (only
+  `id`/`sensor`/`property`/`unit` go on the wire), it exists so a
+  sketch's one per-channel table can feed both `provision()`'s identity
+  and `log()`/a display's rounding (`examples/BME280Node`:
+  `kChannels[0].decimalPlaces`, `kChannels[0].unit`) instead of a
+  second list kept in sync by hand at the same index.
   `provision()` posts the device name/id and a `channel_id,sensor,property,unit`
   list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)
   to `/sensors/provision` -- gated by `needsProvisioning()`

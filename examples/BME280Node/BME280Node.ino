@@ -40,32 +40,23 @@ const uint32_t kFirmwareVersion = 4;
 // Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
 // hPa, 15: battery state of charge % (SensorNodeBattery::kSocChannel --
 // reserved sitewide, see the library's README.md). See BasicNode.ino
-// for when this actually gets posted (needsProvisioning()). Order matters beyond that: the
-// OLED text below indexes into this by position (kChannels[0].unit, etc.) rather than
-// duplicating "C"/"%"/"hPa" a second time, so it has to stay temp/dew point/humidity/
+// for when this actually gets posted (needsProvisioning()). Order matters beyond that: both
+// log() and the OLED text below index into this by position (kChannels[0].decimalPlaces,
+// kChannels[0].unit, etc.) instead of a second list, so it has to stay temp/dew point/humidity/
 // pressure/SOC in this order.
+//
+// decimalPlaces (trailing field, defaults to 2 if omitted -- see SensorNodeChannel) matches
+// each sensor's actual accuracy rather than its raw register resolution: both chips report far
+// more digits than their datasheet accuracy backs up -- BME280 is +-0.5C / +-3%RH / +-1hPa
+// (temp/dew point/humidity/pressure), MAX17048 is roughly +-1% SOC. provision() never reads
+// this field; it's here purely for log()/the OLED below to share.
 const std::vector<SensorNodeChannel> kChannels = {
-    {0, "BME280", "Temperature", "C"},
-    {1, "BME280", "Dew Point Temperature", "C"},
-    {2, "BME280", "Relative Humidity", "%"},
-    {3, "BME280", "Pressure", "hPa"},
-    {SensorNodeBattery::kSocChannel, "MAX17048", "State of Charge", "%"},
+    {0, "BME280", "Temperature", "C", 1},
+    {1, "BME280", "Dew Point Temperature", "C", 1},
+    {2, "BME280", "Relative Humidity", "%", 0},
+    {3, "BME280", "Pressure", "hPa", 1},
+    {SensorNodeBattery::kSocChannel, "MAX17048", "State of Charge", "%", 0},
 };
-
-// Decimal places per channel, matching each sensor's actual accuracy rather than its raw
-// register resolution -- both chips report far more digits than their datasheet accuracy backs
-// up: BME280 is +-0.5C / +-3%RH / +-1hPa (temp/dew point/humidity/pressure), MAX17048 is
-// roughly +-1% SOC. Defined once and shared by both the log() call and the OLED text below, so
-// the two can't drift apart the way a second hardcoded printf precision could.
-// unsigned int, not uint8_t: matches ESP32 core's String(float, unsigned int) constructor
-// exactly for the OLED lines below -- a uint8_t here is ambiguous against WString.h's other
-// explicit String(..., unsigned char) overloads (ties on "one exact arg, one converted arg" in
-// opposite positions). SensorNodeReading::decimalPlaces still narrows this to uint8_t for the
-// log() calls, which is a plain (non-overloaded) implicit conversion, so that's fine as-is.
-const unsigned int kTempPrecision = 1;
-const unsigned int kHumidityPrecision = 0;
-const unsigned int kPressurePrecision = 1;
-const unsigned int kSocPrecision = 0;
 
 SensorNode node;
 BME280 bme;
@@ -117,9 +108,10 @@ void loop() {
   // Channels 4-14 are unused on this node -- log() addresses each entry by
   // position (see SensorNode::log()), so they still need to be present as
   // NAN to hold channel 15's slot rather than shifting it down to 4.
-  node.log({{ch0, kTempPrecision}, {ch1, kTempPrecision}, {ch2, kHumidityPrecision}, {ch3, kPressurePrecision},
+  node.log({{ch0, kChannels[0].decimalPlaces}, {ch1, kChannels[1].decimalPlaces},
+            {ch2, kChannels[2].decimalPlaces}, {ch3, kChannels[3].decimalPlaces},
             NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN,
-            {ch15, kSocPrecision}});
+            {ch15, kChannels[4].decimalPlaces}});
 
   // "Current values" text screen -- entirely skipped if the OLED wasn't
   // detected at boot, so this is a no-op on a board with none wired up.
@@ -127,14 +119,17 @@ void loop() {
     oled.clearDisplay();
     oled.setCursor(0, 0);
     oled.println(oledTitle);
-    // String(value, precision) here, not printf's %.Nf, so the displayed precision can't drift
-    // from what's actually sent to log() above -- both read the same kXPrecision constants. Unit
-    // comes from kChannels rather than a third hardcoded "C"/"%"/"hPa" copy, for the same reason.
-    oled.println("Temp:  " + String(ch0, kTempPrecision) + " " + kChannels[0].unit);
-    oled.println("Dew:   " + String(ch1, kTempPrecision) + " " + kChannels[1].unit);
-    oled.println("Humid: " + String(ch2, kHumidityPrecision) + " " + kChannels[2].unit);
-    oled.println("Press: " + String(ch3, kPressurePrecision) + " " + kChannels[3].unit);
-    oled.println("Batt:  " + String(ch15, kSocPrecision) + " " + kChannels[4].unit);
+    // String(value, precision) + kChannels[i].unit here, not printf's %.Nf plus a hardcoded
+    // "C"/"%"/"hPa", so the displayed precision/unit can't drift from what log() above and
+    // provision() actually use -- all three read the same kChannels row. The (unsigned int)
+    // cast matches ESP32 core's String(float, unsigned int) constructor exactly; a uint8_t
+    // straight from kChannels[i].decimalPlaces is otherwise ambiguous against WString.h's other
+    // explicit String(..., unsigned char) overloads.
+    oled.println("Temp:  " + String(ch0, (unsigned int)kChannels[0].decimalPlaces) + " " + kChannels[0].unit);
+    oled.println("Dew:   " + String(ch1, (unsigned int)kChannels[1].decimalPlaces) + " " + kChannels[1].unit);
+    oled.println("Humid: " + String(ch2, (unsigned int)kChannels[2].decimalPlaces) + " " + kChannels[2].unit);
+    oled.println("Press: " + String(ch3, (unsigned int)kChannels[3].decimalPlaces) + " " + kChannels[3].unit);
+    oled.println("Batt:  " + String(ch15, (unsigned int)kChannels[4].decimalPlaces) + " " + kChannels[4].unit);
     oled.display();
   }
 
