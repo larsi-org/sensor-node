@@ -25,15 +25,17 @@ const int kScreenHeight = 64;
 const uint8_t kOledAddress = 0x3C;
 Adafruit_SSD1306 oled(kScreenWidth, kScreenHeight, &Wire, -1);
 bool oledPresent = false;
-String oledTitle;  // deviceLocation, else deviceName, else a hardcoded fallback -- set in setup()
+String oledTitle;  // deviceName, else a hardcoded fallback -- set in setup()
 
 // Same reset pin and rationale as BasicNode.ino.
 const int kResetPin = 2;
 
 // Bump to force the setup portal open once on the next boot, without touching the reset
-// button/jumper -- see checkFirmwareVersion(). Currently 3 to force one portal visit on
-// batcave's device 0 to fill in Location (added after this device was first provisioned).
-const uint32_t kFirmwareVersion = 3;
+// button/jumper -- see checkFirmwareVersion(). Currently 4 to force one portal visit on
+// batcave's device 0 so its name can be retyped to include the location baked in (e.g.
+// "sensor-node-basement") now that the separate Location field has been merged back into
+// Device Name -- see CLAUDE.md/README.md.
+const uint32_t kFirmwareVersion = 4;
 
 // Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
 // hPa, 15: battery state of charge % (SensorNodeBattery::kSocChannel --
@@ -62,9 +64,7 @@ void setup() {
   node.provision(kChannels);
 
   const SensorNodeConfig &config = node.config();
-  oledTitle = config.deviceLocation.length() > 0 ? config.deviceLocation
-              : config.deviceName.length() > 0   ? config.deviceName
-                                                  : "sensor-node: BME280";
+  oledTitle = config.deviceName.length() > 0 ? config.deviceName : "sensor-node: BME280";
 
   Wire.begin();
   if (!bme.beginI2C()) {

@@ -171,12 +171,7 @@ void SensorNode::begin(unsigned long connectTimeoutMs) {
   bool connected = loadSensorNodeConfig(config_);
 
   if (connected) {
-    // deviceLocation folded in (space-joined, same sanitizer) so multiple devices sharing
-    // one deviceName -- e.g. several identical nodes at the same station -- still get
-    // distinct hostnames instead of colliding on the network.
-    String hostname = sanitizeHostname(config_.deviceLocation.length() > 0
-                                            ? config_.deviceName + " " + config_.deviceLocation
-                                            : config_.deviceName);
+    String hostname = sanitizeHostname(config_.deviceName);
     if (hostname.length() > 0) {
       WiFi.setHostname(hostname.c_str());
     }
@@ -276,8 +271,7 @@ bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
   }
 
   String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) +
-                "&name=" + config_.deviceName + "&location=" + config_.deviceLocation +
-                "&channels=" + channelList;
+                "&name=" + config_.deviceName + "&channels=" + channelList;
   String response = postToServer(serverIp_, "/sensors/provision", body);
 
   Serial.printf("[SensorNode] POST /sensors/provision:\n%s\n", response.c_str());

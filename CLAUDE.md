@@ -10,17 +10,24 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 - `SensorNodeConfig` (`src/SensorNodeConfig.*`) -- `ssids[]`/
   `passwords[]` (fixed-size arrays, `kMaxNetworks` = 3, most-recently-
   added first, NVS keys `ssid0`/`password0`/`ssid1`/...) plus
-  `deviceName`/`deviceLocation`/`deviceId`/`writeKey`/`logIntervalMinutes`, all
+  `deviceName`/`deviceId`/`writeKey`/`logIntervalMinutes`, all
   persisted via `Preferences` (NVS). Server host isn't part of the
   config; it's a hardcoded constant in `SensorNode.cpp` (`kServer`)
   since one node only ever reports to larsi.org -- the "different X
   per node" axis here is sensors wired to a sketch, not backend
-  servers.
+  servers. A `deviceLocation` field briefly existed here (2026-08-23 to
+  2026-08-24) alongside `device.device_location` server-side -- merged
+  back into `deviceName` and dropped: most stations only ever have one
+  device, and where they don't (`thecoop`), what actually distinguishes
+  them is role ("Solar Radiation", "ElitePro Power Meter"), not
+  physical location, so a dedicated location field was the wrong shape
+  more often than it fit. `saveSensorNodeConfig()` purges any stale
+  `deviceLocation` NVS key left over from that window.
 - `SensorNodePortal` (`src/SensorNodePortal.*`) -- open AP + captive
   portal (`WebServer` + `DNSServer` catch-all) used only while none of
   the known networks connect. `runSensorNodeSetupPortal()` blocks
   forever and restarts the device on successful submit. `buildFormPage()`
-  pre-fills device name/location/id/write key/log frequency from the
+  pre-fills device name/id/write key/log frequency from the
   existing config (loaded fresh each render), since the common reason
   the portal is running at all is that the node moved somewhere new --
   only the network fields need filling in (the password field is a
@@ -33,7 +40,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   already-known SSID leaves the saved one alone (a blank password on a
   genuinely new SSID is still saved as-is, for a real open network).
   Without this, resubmitting the form just to change the device
-  name/location -- the password field is never pre-filled -- would
+  name -- the password field is never pre-filled -- would
   silently erase a working Wi-Fi password.
 - `SensorNode` (`src/SensorNode.*`) -- the class sketches use.
   `begin()` tries each known network in turn, falls back to the portal
@@ -42,24 +49,20 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   wire protocol (see `https://larsi.org/sensors/sensor-node.php` in the
   main site repo) and writes it as a raw HTTP/1.1 request directly to a
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
-  `provision()` posts the device name/location/id and a `channel_id,sensor,property,unit`
+  `provision()` posts the device name/id and a `channel_id,sensor,property,unit`
   list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)
   to `/sensors/provision` -- safe to call every boot right after
   `begin()`, before the first `log()`: server-side it's a non-empty
   upsert (creates the row if missing, otherwise updates only the
   fields this call actually sent a non-empty value for), not a pure
-  create-once. A blank `deviceLocation` (never set through the portal)
-  never blanks out a location set by hand server-side, but a real
-  device name/sensor/property/unit this call reports does overwrite
-  whatever was there. Both `log()` and
+  create-once. A blank `name=` never blanks out a device name set by
+  hand server-side, but a real device name/sensor/property/unit this
+  call reports does overwrite whatever was there. Both `log()` and
   `provision()` share a `postToServer(path, body)` helper for the
   connect/write/read boilerplate. `sanitizeHostname()` derives the
   network hostname from `deviceName` (letters/digits/hyphens only,
-  runs of anything else collapsed to one `-`), space-joined with
-  `deviceLocation` first when it's set -- so devices sharing one
-  `deviceName` (e.g. several identical nodes at the same station) get
-  distinct hostnames instead of colliding. Both fields stay free-text
-  and unsanitized everywhere else (`provision()`'s `name=`/`location=`,
+  runs of anything else collapsed to one `-`) -- `deviceName` stays
+  free-text and unsanitized everywhere else (`provision()`'s `name=`,
   reports), since `WiFi.setHostname()` is the only consumer that
   actually needs the restricted shape. `openPortal()` is a thin
   wrapper around `runSensorNodeSetupPortal()` -- an on-demand way to

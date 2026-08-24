@@ -8,9 +8,7 @@ sensors.
 If the node can't connect to any of its known networks (nothing saved
 yet, or none in range), it opens an access point with a captive setup
 portal: pick a network from a live scan, enter the password, and set a
-device name, an optional location (e.g. "basement", "upstairs
-hallway" -- for telling apart multiple devices at the same
-station/write key), device id (0-15), write key, and log frequency
+device name, device id (0-15), write key, and log frequency
 (1, 2, 3, 5, 10, 15, 20, 30, or 60 minutes -- default 5). It saves
 the settings to flash (NVS) and reboots, then connects normally on
 every later boot.
@@ -20,7 +18,7 @@ most-recently-added first -- a node that moves between a handful of
 locations (e.g. two homes) reconnects immediately without
 reprovisioning every time it moves back. `begin()` tries each in turn;
 only once none of them connect does the portal come up, pre-filled
-with the existing device name/location/id/write key (but not the
+with the existing device name/id/write key (but not the
 network password -- see Notes) so moving to a new location only means
 adding one new network.
 
@@ -30,7 +28,9 @@ device id gets its own block of 16 channels (see "Data Channel" in the
 [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
 Different sensor nodes attached to the same location/key get different
 device ids; what sensors are actually wired to a given node is up to
-each sketch.
+each sketch. If you have more than one device at a station and want to
+tell them apart, that's what free-text `deviceName` is for (e.g.
+`"sensor-node-basement"`) -- there's no separate location field.
 
 Channel 15 (the last of each device's 16) is reserved sitewide for
 battery state of charge, via `SensorNodeBattery` -- see the API section
@@ -110,7 +110,7 @@ Library" libraries from the Library Manager.
   Safe to call every boot -- server-side it's a non-empty upsert:
   creates the device/channel rows if missing, otherwise updates only
   the fields this call sent a non-empty value for (so an empty
-  `deviceLocation` never blanks out one set by hand, but a real
+  `name=` never blanks out one set by hand, but a real
   name/sensor/property/unit does overwrite what was there). Call it
   once after `begin()`, before the first `log()`.
 - `bool log(const std::vector<float> &values, int decimalPlaces = 2)`
@@ -120,7 +120,7 @@ Library" libraries from the Library Manager.
   Returns whether the server confirmed the data was logged.
 - `const SensorNodeConfig &config() const` -- read-only access to the
   loaded settings (`ssids`/`passwords` arrays, `deviceName`,
-  `deviceLocation`, `deviceId`, `writeKey`, `logIntervalMinutes`). Sketches read
+  `deviceId`, `writeKey`, `logIntervalMinutes`). Sketches read
   `logIntervalMinutes` themselves to compute their own `loop()` delay
   -- this library doesn't call `log()` on a timer itself.
 
@@ -152,7 +152,7 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
   while unconfigured/disconnected -- get a write key first (see the
   [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
 - The portal's Wi-Fi Password field is never pre-filled, even when
-  re-opening the portal just to tweak the device name/location. Leave
+  re-opening the portal just to tweak the device name. Leave
   it blank to keep the saved password for an already-known network --
   it's only saved as typed for a genuinely new network.
 - The write key must match `larsi.org`'s own generator (`id.php`'s
@@ -165,17 +165,14 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
   (`isValidWriteKey()`) -- not just the length. A wrong-shape key would
   otherwise only fail once talking to the real server, with a generic
   "Key not found".
-- `deviceName`/`deviceLocation` are sent as-is to the provision endpoint/shown
-  in reports, but the network hostname (`WiFi.setHostname()`) is a sanitized,
-  combined version -- `deviceLocation` is space-joined onto `deviceName`
-  first (when set), then runs of anything other than letters/digits/hyphens
-  collapse to a single `-`, and leading/trailing junk is dropped. This is
-  what lets several devices sharing one `deviceName` still get distinct
-  hostnames instead of colliding on the network. `WiFi.setHostname()` itself
-  doesn't validate anything (just silently truncates past 31 chars), but
-  routers' DHCP/mDNS handling of a raw name with spaces etc. can be
-  unpredictable, so `deviceName` `"Batcave BME280"` + `deviceLocation`
-  `"basement"` becomes the hostname `Batcave-BME280-basement`.
+- `deviceName` is sent as-is to the provision endpoint/shown in reports, but
+  the network hostname (`WiFi.setHostname()`) is a sanitized version --
+  runs of anything other than letters/digits/hyphens collapse to a
+  single `-`, and leading/trailing junk is dropped. `WiFi.setHostname()`
+  itself doesn't validate anything (just silently truncates past 31
+  chars), but routers' DHCP/mDNS handling of a raw name with spaces
+  etc. can be unpredictable, so a free-text device name like
+  `"Batcave BME280 #1"` becomes the hostname `Batcave-BME280-1`.
 - The device clock is set via NTP (`WiFiUDP`, Cloudflare's and
   Google's public servers) before `log()`'s first HTTPS connection --
   needed for TLS certificate date validation to pass.

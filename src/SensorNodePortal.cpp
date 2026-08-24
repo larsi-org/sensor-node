@@ -101,7 +101,7 @@ String buildDeviceIdOptions(uint8_t selected) {
 // (see buildFormPage()), so a blank incoming password on an already-known
 // SSID is treated as "didn't mean to change it" and leaves the saved one
 // alone -- otherwise re-submitting the form just to tweak the device
-// name/location would silently wipe a working Wi-Fi password. A blank
+// name would silently wipe a working Wi-Fi password. A blank
 // password on a genuinely new SSID is still saved as-is (a real open
 // network is a legitimate case there).
 void addOrUpdateNetwork(SensorNodeConfig &config, const String &ssid, const String &password) {
@@ -187,12 +187,8 @@ String buildFormPage() {
   page += "<label>Wi-Fi Network</label><select name=\"ssid\">" + options + "</select>";
   page += "<label>Wi-Fi Password</label><input type=\"password\" name=\"password\" "
           "placeholder=\"Leave blank to keep the saved password for a known network\">";
-  page += "<label>Device Name</label><input type=\"text\" name=\"deviceName\" maxlength=\"32\" value=\"" +
+  page += "<label>Device Name (and Location)</label><input type=\"text\" name=\"deviceName\" maxlength=\"32\" value=\"" +
           htmlEscape(existing.deviceName) + "\">";
-  // Optional, matching device.device_location's varchar(32) -- e.g. "basement", "upstairs
-  // hallway" -- for telling apart multiple devices at the same station/write key.
-  page += "<label>Location (optional)</label><input type=\"text\" name=\"deviceLocation\" maxlength=\"32\" value=\"" +
-          htmlEscape(existing.deviceLocation) + "\">";
   page += "<label>Device ID</label><select name=\"deviceId\">" +
           buildDeviceIdOptions(existing.deviceId) + "</select>";
   page += "<label>Write Key (16 characters, starts with a letter)</label>";
@@ -225,7 +221,6 @@ void handleSave() {
   String newSsid = server.arg("ssid");
   String newPassword = server.arg("password");
   config.deviceName = server.arg("deviceName");
-  config.deviceLocation = server.arg("deviceLocation");
   config.deviceId = (uint8_t)constrain(server.arg("deviceId").toInt(), 0, 15);
   config.writeKey = server.arg("writeKey");
   config.writeKey.trim();  // strip accidental leading/trailing whitespace from copy-paste

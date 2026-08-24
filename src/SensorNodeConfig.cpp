@@ -14,7 +14,6 @@ bool loadSensorNodeConfig(SensorNodeConfig &config) {
     config.passwords[i] = prefs.getString(("password" + String(i)).c_str(), "");
   }
   config.deviceName = prefs.getString("deviceName", "");
-  config.deviceLocation = prefs.getString("deviceLocation", "");
   config.deviceId = prefs.getUChar("deviceId", 0);
   config.writeKey = prefs.getString("writeKey", "");
   config.logIntervalMinutes = prefs.getUChar("logInterval", 5);
@@ -30,10 +29,13 @@ void saveSensorNodeConfig(const SensorNodeConfig &config) {
     prefs.putString(("password" + String(i)).c_str(), config.passwords[i]);
   }
   prefs.putString("deviceName", config.deviceName);
-  prefs.putString("deviceLocation", config.deviceLocation);
   prefs.putUChar("deviceId", config.deviceId);
   prefs.putString("writeKey", config.writeKey);
   prefs.putUChar("logInterval", config.logIntervalMinutes);
+  // Purges the retired deviceLocation key on any device that still has one saved from before
+  // it was merged back into deviceName -- a no-op (remove() on an absent key just returns
+  // false) once a device has already saved since this change.
+  prefs.remove("deviceLocation");
   prefs.end();
 }
 
