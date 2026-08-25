@@ -110,14 +110,16 @@ Library" libraries from the Library Manager.
   wiring (a button to GND).
 - `void checkPendingCommand()` -- checks for a one-shot test command left by an earlier
   `log()` call (see below and [larsi.org/sensors/sensor-node.php](https://larsi.org/sensors/sensor-node.php)'s
-  `Command:`/`pending_command` docs), and if there is one, clears it and dispatches it.
-  Currently only `"open_portal"` is recognized (opens the setup portal, never returning);
-  anything else is logged and dropped rather than retried forever. A no-op if nothing's
-  pending. Call once at the top of `setup()`, alongside `checkFirmwareVersion()`/
-  `checkPortalButton()` and before `begin()` -- see `examples/BasicNode`. This is the
-  "next boot" half of the mechanism, for commands that can't run until `begin()` hasn't
-  connected yet (like `open_portal`); `applyPendingCommand()` (below) is what triggers the
-  reboot that brings execution back here for those -- a command it can run immediately
+  `Command:`/`pending_command` docs), and if it's `"open_portal"` -- the only value this
+  owns -- clears it and opens the setup portal (never returning). A no-op for anything
+  else, including a command this build doesn't recognize at all: that's deliberately not
+  cleared here, so a sketch checking `pendingCommand()`/`clearPendingCommand()` itself (see
+  the Notes section below) for its own command name still gets to see it. Call once at the
+  top of `setup()`, alongside `checkFirmwareVersion()`/`checkPortalButton()` and before
+  `begin()` -- see `examples/BasicNode`. This is the "next boot" half of the mechanism, for
+  commands that can't run until `begin()` hasn't connected yet (like `open_portal`);
+  `applyPendingCommand()` (below) is what triggers the reboot that brings execution back
+  here for those -- a command it can run immediately
   instead (like `scan_i2c`) never reaches this method at all.
 - `bool needsProvisioning() const` -- true if the setup portal saved
   settings since the last confirmed `provision()` call. Gate
@@ -163,16 +165,17 @@ Library" libraries from the Library Manager.
   `applyPendingCommand()`/`checkPendingCommand()` to act on -- `log()` itself never acts on
   it.
 - `void applyPendingCommand()` -- acts on a command `log()` persisted on this or an
-  earlier call, otherwise a no-op. A small allowlist of commands that don't need `begin()`
-  to not have connected yet run immediately, right here, and clear the flag themselves --
-  currently just `"scan_i2c"` (sweeps every I2C address on whatever `Wire` is already
-  using and prints the result to `Serial`, e.g. `[SensorNode] I2C scan: 0x36,0x3C,0x77` or
-  `...: none`; a bench-testing aid only -- never sent to the server, since whoever
-  triggers it is physically at the device with a serial connection already open).
-  Everything else (`"open_portal"`, or a command this build doesn't recognize as safe to
-  run immediately) restarts the device instead, without clearing the flag -- the point of
-  restarting is to reach `checkPendingCommand()`, at the top of the next `setup()`, which
-  is what actually consumes those. Call this right after `log()` in `loop()` -- see
+  earlier call, if it's one this method owns. `"scan_i2c"` runs immediately, right here
+  (sweeps every I2C address on whatever `Wire` is already using and prints the result to
+  `Serial`, e.g. `[SensorNode] I2C scan: 0x36,0x3C,0x77` or `...: none`; a bench-testing
+  aid only -- never sent to the server, since whoever triggers it is physically at the
+  device with a serial connection already open) and clears the flag itself. `"open_portal"`
+  restarts the device instead, without clearing the flag -- the point of restarting is to
+  reach `checkPendingCommand()`, at the top of the next `setup()`, which is what actually
+  consumes it. Anything else -- including nothing pending, or a command this library
+  doesn't recognize at all -- is left completely untouched, so a sketch can check
+  `pendingCommand()`/`clearPendingCommand()` itself (see Notes) for its own command name
+  without this method interfering. Call this right after `log()` in `loop()` -- see
   `examples/BasicNode`.
 - `const SensorNodeConfig &config() const` -- read-only access to the
   loaded settings (`ssids`/`passwords` arrays, `deviceName`,
@@ -199,6 +202,16 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
 
 ## Notes
 
+- A sketch can implement its own pending commands on top of the same mailbox
+  `applyPendingCommand()`/`checkPendingCommand()` use, via `pendingCommand()`/
+  `setPendingCommand()`/`clearPendingCommand()` (`SensorNodeConfig.h`, plain functions, not
+  tied to a `SensorNode` instance). Both library methods only ever touch a command they
+  specifically recognize and leave everything else alone, so this is the way to add a
+  command needing a sketch-specific dependency (e.g. a 1-Wire scan needing the `OneWire`
+  library) without forcing that dependency onto every sketch that uses `SensorNode` --
+  check `pendingCommand()` for your own command name (typically right after
+  `applyPendingCommand()` in `loop()`, or at the top of `setup()` for one that needs to run
+  before `begin()` connects) and call `clearPendingCommand()` once you've handled it.
 - The server is hardcoded to `larsi.org` -- this library is for nodes
   reporting there, not a generic multi-backend client.
 - TLS is verified against a curated 5-root CA bundle

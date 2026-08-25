@@ -74,13 +74,22 @@ void clearProvisionPending();
 // Free functions rather than a SensorNodeConfig field: checkPendingCommand() needs to read this
 // at the top of setup(), before begin() has ever called loadSensorNodeConfig(), the same reason
 // firmwareVersionChanged() above is a free function too.
+//
+// These three functions are deliberately public API, not internal to SensorNode -- both
+// checkPendingCommand() and applyPendingCommand() only ever touch a value they specifically
+// recognize (currently "open_portal" and "scan_i2c") and leave everything else alone, so a
+// sketch is free to check pendingCommand() for its own command name and call
+// clearPendingCommand() itself once handled. That's how a sketch-specific dependency (e.g. a
+// 1-Wire scan needing the OneWire library) can use this same mailbox without forcing that
+// dependency onto every sketch that uses SensorNode -- see CLAUDE.md.
 String pendingCommand();
 
 // Persists a newly-received command, overwriting any not-yet-applied one (last one delivered
 // wins). Call this from SensorNode::log() once a response actually carries one.
 void setPendingCommand(const String &command);
 
-// Clears the pending command. Call this as soon as checkPendingCommand() reads it, whether or
-// not the value was actually recognized -- an unrecognized command (e.g. from firmware that
-// predates it) should get dropped, not retried forever every boot.
+// Clears the pending command. checkPendingCommand()/applyPendingCommand() call this only once
+// they've actually acted on a command they own; a sketch handling its own command name should
+// do the same once it's done. A command nothing ever claims (a typo, or one from firmware that
+// predates it) is left to accumulate rather than self-clearing -- see CLAUDE.md.
 void clearPendingCommand();

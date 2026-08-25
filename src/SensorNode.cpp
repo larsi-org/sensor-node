@@ -210,18 +210,11 @@ void SensorNode::checkFirmwareVersion(uint32_t version) {
 
 void SensorNode::checkPendingCommand() {
   String command = pendingCommand();
-  if (command.length() == 0) return;
+  if (command != kOpenPortalCommand) return;  // not ours -- see the .h comment
 
-  // Consumed on read regardless of outcome -- see the .h comment: an unrecognized command
-  // (e.g. one a future firmware version added that this one predates) shouldn't retry forever.
   clearPendingCommand();
-
-  if (command == kOpenPortalCommand) {
-    Serial.println("[SensorNode] Pending command \"open_portal\" -- opening setup portal.");
-    openPortal();  // never returns; reboots on save
-  } else {
-    Serial.printf("[SensorNode] Unknown pending command \"%s\" -- ignoring.\n", command.c_str());
-  }
+  Serial.println("[SensorNode] Pending command \"open_portal\" -- opening setup portal.");
+  openPortal();  // never returns; reboots on save
 }
 
 void SensorNode::checkPortalButton(uint8_t pin, unsigned long wipeHoldMs) {
@@ -309,7 +302,6 @@ bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::
 
 void SensorNode::applyPendingCommand() {
   String command = pendingCommand();
-  if (command.length() == 0) return;
 
   if (command == kScanI2CCommand) {
     // Doesn't need begin() to not have connected yet, unlike open_portal -- runs right here.
@@ -318,11 +310,18 @@ void SensorNode::applyPendingCommand() {
     return;
   }
 
-  // Anything else (open_portal, or a command this build doesn't know how to run immediately)
-  // defers to the next boot's checkPendingCommand() -- doesn't clear the command itself, since
-  // it's already persisted and staying set is what lets that check pick it up after this restart.
-  Serial.println("[SensorNode] Pending command received -- restarting to apply.");
-  ESP.restart();
+  if (command == kOpenPortalCommand) {
+    // Doesn't clear the command itself -- it's already persisted, and staying set is what lets
+    // checkPendingCommand() pick it up after this restart, at the top of the next setup().
+    Serial.println("[SensorNode] Pending command received -- restarting to apply.");
+    ESP.restart();
+    return;
+  }
+
+  // Anything else -- including empty -- isn't ours to interpret. A sketch with its own
+  // commands (e.g. a 1-Wire scan, without forcing that dependency on every sketch using this
+  // library) can check pendingCommand()/clearPendingCommand() itself, e.g. right after this
+  // call in loop() -- see SensorNodeConfig.h.
 }
 
 bool SensorNode::needsProvisioning() const { return provisionPending(); }

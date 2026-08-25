@@ -153,21 +153,40 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   Serial-only, never reported back to the server: it's a bench-testing aid for whoever's
   physically at the device with a serial connection already open (see
   [[bench-test-serial-only]]), so there's no reason to round-trip the result anywhere.
-  Everything else falls through to `applyPendingCommand()`'s default -- restarts the
-  device, without clearing the flag first; `checkPendingCommand()` (called from `setup()`,
+  `"open_portal"` restarts the device instead (still inside `applyPendingCommand()`),
+  without clearing the flag first; `checkPendingCommand()` (called from `setup()`,
   alongside `checkFirmwareVersion()`, before `begin()`) is what that restart actually
-  reaches -- it clears the flag (consumed on read regardless of outcome, so an
-  unrecognized command from a future firmware version doesn't retry forever) and
-  dispatches. Currently the only value it recognizes is `"open_portal"` (calls
-  `openPortal()`); anything else is logged and dropped. This split -- an allowlist of
-  immediate commands in `applyPendingCommand()`, everything else deferred to
-  `checkPendingCommand()` at the next boot -- is deliberate: `checkPendingCommand()`
-  mirrors `checkFirmwareVersion()`'s defer-to-next-boot shape because a command needing to
-  run *before* `begin()` connects (`open_portal` today; simulating a network outage is the
-  standing example of a future one) has no other way to do that, while a command like
-  `scan_i2c` that doesn't share that constraint gets to skip the reboot round-trip
-  entirely -- `applyPendingCommand()`'s allowlist is what makes that call per-command
-  instead of forcing every command through the slower path.
+  reaches -- it's the only value *it* recognizes too, and it clears the flag and calls
+  `openPortal()`. This split -- an allowlist of immediate commands in
+  `applyPendingCommand()`, one deferred command in `checkPendingCommand()` at the next
+  boot -- is deliberate: `checkPendingCommand()` mirrors `checkFirmwareVersion()`'s
+  defer-to-next-boot shape because a command needing to run *before* `begin()` connects
+  (`open_portal` today; simulating a network outage is the standing example of a future
+  one) has no other way to do that, while a command like `scan_i2c` that doesn't share
+  that constraint gets to skip the reboot round-trip entirely.
+
+  **Anything neither method recognizes is left completely untouched** (2026-08-25 revision
+  -- both used to have a catch-all: `applyPendingCommand()` defaulted unrecognized commands
+  to a restart, `checkPendingCommand()` defaulted to clearing-and-dropping them). That
+  catch-all was actively wrong for a real case that came up while scoping 1-Wire/DS18B20
+  support: a sketch-specific command like `scan_1wire` needs the third-party `OneWire`
+  library, and since Arduino compiles every `.cpp` under `src/` regardless of what a sketch
+  `#include`s (the same reason `SensorNodeBattery` already applies to every sketch, see
+  above), baking `scan_1wire` into this library the same way as `scan_i2c` would force
+  `OneWire` onto every sketch using `SensorNode`, not just ones with a 1-Wire bus --
+  unlike `Wire`/I2C, `OneWire` doesn't ship with the ESP32 core, so this is a real added
+  dependency, not a free one (worth separately noting: `OneWire`'s current *published*
+  release, 2.3.8, doesn't even compile on ESP32-C6 at all -- the fix landed on GitHub `main`
+  in June 2025 but isn't in a tagged release yet, so using it here means installing from
+  GitHub directly, not Library Manager, until that changes). Leaving unrecognized commands
+  alone instead makes `pendingCommand()`/`setPendingCommand()`/`clearPendingCommand()`
+  (`SensorNodeConfig.h`) a general extension point: a sketch owns its own command name
+  entirely, checking/clearing it itself (typically right after `applyPendingCommand()` in
+  `loop()`), so a sketch-specific dependency never has to touch this library at all. The
+  trade-off: a command nothing ever claims (a typo, or one written for firmware that
+  predates it) no longer self-clears -- it sits in `pending_command` until someone notices
+  and clears it by hand. Acceptable since this mailbox is a manually-triggered testing aid,
+  not high-volume traffic.
   `checkPortalButton()` only runs once, at the top of `setup()` --
   holding the pin while the device is already looping does nothing;
   it has to be held through an actual reset (button press or power

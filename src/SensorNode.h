@@ -76,10 +76,13 @@ class SensorNode {
   void checkPortalButton(uint8_t pin, unsigned long wipeHoldMs = 5000);
 
   // Checks for a command left over from a previous log() call (see log()'s doc comment below)
-  // and, if one's pending, clears it and dispatches it -- currently only "open_portal" is
-  // recognized (opens the setup portal, never returning), anything else is logged and ignored.
-  // A no-op if nothing's pending. Call this once at the top of setup(), alongside
-  // checkFirmwareVersion()/checkPortalButton() and before begin() -- see examples/BasicNode.
+  // and, if it's "open_portal" -- the only value this owns -- clears it and opens the setup
+  // portal (never returning). A no-op for anything else, including a command this build simply
+  // doesn't recognize: that's not this method's call to make, and clearing it here would erase
+  // it before a sketch checking pendingCommand()/clearPendingCommand() itself (SensorNodeConfig.h
+  // -- e.g. for its own command not built into this library) ever got a chance to see it. Call
+  // this once at the top of setup(), alongside checkFirmwareVersion()/checkPortalButton() and
+  // before begin() -- see examples/BasicNode.
   //
   // This is the "next boot" half of the mechanism: applyPendingCommand() (below) is what
   // actually triggers the reboot that brings execution back here with something to act on.
@@ -104,13 +107,15 @@ class SensorNode {
   // applyPendingCommand()/checkPendingCommand() to act on -- log() itself never acts on it.
   bool log(const std::vector<SensorNodeChannel> &channels, const std::vector<float> &values);
 
-  // Acts on a command log() persisted on this or an earlier call -- a no-op if nothing's
-  // pending. A small allowlist of commands that don't need begin() to not have connected yet
-  // (currently just "scan_i2c") run immediately, right here, and clear the flag themselves.
-  // Everything else restarts the device instead, without clearing the flag -- the point of
-  // restarting is to bring the device back to checkPendingCommand(), at the top of the next
-  // setup(), which is what actually consumes those. Call this right after log() in loop() --
-  // see examples/BasicNode.
+  // Acts on a command log() persisted on this or an earlier call, if it's one this method
+  // owns. "scan_i2c" runs immediately, right here (no restart needed -- see scanI2CBus()) and
+  // clears the flag itself; "open_portal" restarts the device instead, without clearing the
+  // flag, so checkPendingCommand() (at the top of the next setup()) is what actually consumes
+  // it. Anything else -- including nothing pending, or a command this library doesn't
+  // recognize at all -- is left completely untouched: a sketch with its own commands can check
+  // pendingCommand()/clearPendingCommand() itself (SensorNodeConfig.h) right after this call,
+  // e.g. to run a 1-Wire scan without forcing that library's dependency on every sketch that
+  // uses SensorNode. Call this right after log() in loop() -- see examples/BasicNode.
   void applyPendingCommand();
 
   // True if the setup portal saved settings since the last confirmed provision() call -- gate
