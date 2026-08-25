@@ -31,11 +31,10 @@ String oledTitle;  // deviceName, else a hardcoded fallback -- set in setup()
 const int kResetPin = 2;
 
 // Bump to force the setup portal open once on the next boot, without touching the reset
-// button/jumper -- see checkFirmwareVersion(). Currently 4 to force one portal visit on
-// batcave's device 0 so its name can be retyped to include the location baked in (e.g.
-// "sensor-node-basement") now that the separate Location field has been merged back into
-// Device Name -- see CLAUDE.md/README.md.
-const uint32_t kFirmwareVersion = 4;
+// button/jumper -- see checkFirmwareVersion(). Currently 5 to force one portal visit on
+// this board once it's repurposed as device 1 (a new board is taking over as device 0),
+// so its device id can be retyped from 0 to 1 without a factory reset.
+const uint32_t kFirmwareVersion = 5;
 
 // Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
 // hPa, 15: battery state of charge % (SensorNodeBattery::kSocChannel --
