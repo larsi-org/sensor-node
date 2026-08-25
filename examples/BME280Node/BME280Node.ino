@@ -78,6 +78,23 @@ void printReadings(const std::vector<float> &values) {
   }
 }
 
+// Top-line battery gauge, right-aligned: kTitleWidth (6px/char at text size 1) for the device
+// name leaves exactly kBatteryIconWidth pixels for this icon, no overlap either way.
+const size_t kTitleWidth = 19;
+const int16_t kBatteryIconWidth = 14;
+
+// A 13x7 outline + 1px nub, matching ~/Pictures/bat.png's hand-drawn reference icon (decoded
+// pixel-by-pixel rather than redrawn from memory) -- 5 fill bars at x=2,4,6,8,10, gaps at
+// x=3,5,7,9 always empty, drawn instead of blitted since the shape is simple enough that this
+// is fewer lines than embedding a bitmap.
+void drawBatteryIcon(int16_t x, int16_t y, uint8_t barsLit) {
+  oled.drawRect(x, y, 13, 7, SH110X_WHITE);
+  oled.drawFastVLine(x + 13, y + 2, 3, SH110X_WHITE);
+  for (uint8_t i = 0; i < barsLit && i < 5; i++) {
+    oled.fillRect(x + 2 + 2 * i, y + 2, 1, 3, SH110X_WHITE);
+  }
+}
+
 SensorNode node;
 BME280 bme;
 SensorNodeBattery battery;
@@ -137,7 +154,19 @@ void loop() {
   if (oledPresent) {
     oled.clearDisplay();
     oled.setCursor(0, 0);
-    oled.println(oledTitle);
+    oled.print(oledTitle.substring(0, kTitleWidth));
+    // No icon at all (not an empty/0-bar one) when the fuel gauge isn't present -- (int)NAN
+    // isn't safe to feed into the bars-lit math below, and a 0-bar icon would misleadingly
+    // read as "battery dead" instead of "no battery".
+    if (!isnan(ch15)) {
+      // (soc+10)/20 in integer math is round-to-nearest-20% (equivalent to
+      // floor(soc/20 + 0.5)), not floor(soc/20) -- floor alone would read as empty until 20%
+      // and never show a full icon until exactly 100%. constrain() clamps the fuel gauge's
+      // occasional >100% overshoot.
+      uint8_t barsLit = (uint8_t)constrain(((int)ch15 + 10) / 20, 0, 5);
+      drawBatteryIcon(kScreenWidth - kBatteryIconWidth, 0, barsLit);
+    }
+    oled.setCursor(0, 8);
     // Reads label/decimalPlaces/unit straight from kChannels, so the OLED can't drift from
     // what log() above and provision() actually use -- all three read the same rows.
     printReadings(readings);
