@@ -78,9 +78,12 @@ void printReadings(const std::vector<float> &values) {
   }
 }
 
-// Top-line battery gauge, right-aligned: kTitleWidth (6px/char at text size 1) for the device
-// name leaves exactly kBatteryIconWidth pixels for this icon, no overlap either way.
-const size_t kTitleWidth = 19;
+// Top-line battery gauge, right-aligned. kTitleWidth (6px/char at text size 1) leaves the last
+// 2 characters' worth of pixels overlapping the icon's kBatteryIconWidth-pixel corner -- fine,
+// since that area gets cleared and redrawn whenever the icon actually draws (see loop()); when
+// it doesn't (no fuel gauge), those 2 extra characters of device name show instead of being
+// reserved-and-wasted.
+const size_t kTitleWidth = 21;
 const int16_t kBatteryIconWidth = 14;
 
 // A 13x7 outline + 1px nub, matching ~/Pictures/bat.png's hand-drawn reference icon (decoded
@@ -125,6 +128,14 @@ void setup() {
     oled.setRotation(1);
     oled.setTextColor(SH110X_WHITE);
     oled.setTextSize(1);
+    // Show the device name right away rather than leaving the display in whatever it powered
+    // on with for the full settle delay below -- loop() (and its clearDisplay()) doesn't run
+    // until after that delay, up to 3 minutes. No battery icon yet -- readSOC() isn't called
+    // until loop() either.
+    oled.clearDisplay();
+    oled.setCursor(0, 0);
+    oled.print(oledTitle.substring(0, kTitleWidth));
+    oled.display();
   }
 
   // The very first reading right after boot occasionally comes back as a
@@ -164,6 +175,10 @@ void loop() {
       // and never show a full icon until exactly 100%. constrain() clamps the fuel gauge's
       // occasional >100% overshoot.
       uint8_t barsLit = (uint8_t)constrain(((int)ch15 + 10) / 20, 0, 5);
+      // kTitleWidth's last couple characters can land under this corner -- wipe it before
+      // drawing, since drawBatteryIcon()'s outline/bars only ever set foreground pixels and
+      // would otherwise leave stray text pixels showing through the icon's gaps.
+      oled.fillRect(kScreenWidth - kBatteryIconWidth, 0, kBatteryIconWidth, 8, SH110X_BLACK);
       drawBatteryIcon(kScreenWidth - kBatteryIconWidth, 0, barsLit);
     }
     oled.setCursor(0, 8);
