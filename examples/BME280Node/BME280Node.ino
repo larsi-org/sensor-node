@@ -15,15 +15,12 @@
 #include <SparkFunBME280.h>
 #include <Wire.h>
 
-// Optional Adafruit FeatherWing OLED (128x64, SH1107 -- Adafruit switched this
-// FeatherWing from SSD1306 to SH1107 on newer boards; same footprint but a
-// different controller, wrong library gives a garbled top half/black bottom
-// half, not a clean failure -- I2C address 0x3C, shares the Qwiic bus with the
-// BME280/MAX17048). Detected at boot via oled.begin()'s return value, same
-// pattern as bme.beginI2C()/battery.begin() below -- if it's not physically
-// connected, oledPresent stays false and every display call in loop() is
-// skipped entirely. SH1107's native orientation is portrait (tall x wide, not
-// wide x tall like SSD1306's constructor) -- constructor takes height then
+// Optional Adafruit FeatherWing OLED (128x64, SH1107, I2C address 0x3C --
+// shares the Qwiic bus with the BME280/MAX17048). Detected at boot via
+// oled.begin()'s return value, same pattern as bme.beginI2C()/battery.begin()
+// below -- if it's not physically connected, oledPresent stays false and
+// every display call in loop() is skipped entirely. SH1107's native
+// orientation is portrait (tall x wide) -- constructor takes height then
 // width, and setRotation(1) below rotates it back to landscape.
 const int kScreenWidth = 128;
 const int kScreenHeight = 64;
