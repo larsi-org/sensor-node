@@ -10,8 +10,12 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 - `SensorNodeConfig` (`src/SensorNodeConfig.*`) -- `ssids[]`/
   `passwords[]` (fixed-size arrays, `kMaxNetworks` = 3, most-recently-
   added first, NVS keys `ssid0`/`password0`/`ssid1`/...) plus
-  `deviceName`/`deviceId`/`writeKey`/`logIntervalMinutes`, all
-  persisted via `Preferences` (NVS). Server host isn't part of the
+  `deviceName`/`deviceId`/`writeKey`/`logIntervalMinutes`/`reportEveryCycles`, all
+  persisted via `Preferences` (NVS). `reportEveryCycles` (1-12, default 1, added
+  2026-08-25) is unread by this library today -- it only rides along on `provision()`'s
+  POST body so the server can size `zeus_minutes` correctly once a future buffering sketch
+  actually sets it above 1; nothing here batches `log()` calls yet. Server host isn't part
+  of the
   config; it's a hardcoded constant in `SensorNode.cpp` (`kServer`)
   since one node only ever reports to larsi.org -- the "different X
   per node" axis here is sensors wired to a sketch, not backend
@@ -27,7 +31,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   portal (`WebServer` + `DNSServer` catch-all) used only while none of
   the known networks connect. `runSensorNodeSetupPortal()` blocks
   forever and restarts the device on successful submit. `buildFormPage()`
-  pre-fills device name/id/write key/log frequency from the
+  pre-fills device name/id/write key/log frequency/report frequency from the
   existing config (loaded fresh each render), since the common reason
   the portal is running at all is that the node moved somewhere new --
   only the network fields need filling in (the password field is a
@@ -92,9 +96,9 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `property` is meant for the server/reports and can run long
   (`"Dew Point Temperature"`), too long for the 128x64 OLED's
   default-font grid (21 columns x 8 rows at `setTextSize(1)`).
-  `provision()` posts the device name/id and a `channel_id,sensor,property,unit`
-  list (`SensorNodeChannel[]`, one entry per channel, fixed per sketch)
-  to `/sensors/provision` -- gated by `needsProvisioning()`
+  `provision()` posts the device name/id/`reportEveryCycles` and a
+  `channel_id,sensor,property,unit` list (`SensorNodeChannel[]`, one entry per channel,
+  fixed per sketch) to `/sensors/provision` -- gated by `needsProvisioning()`
   (`SensorNodeConfig`'s `provisionPending` NVS flag), not called
   unconditionally every boot: it can't run from inside the portal
   itself (the device isn't online as a station yet at that point), so
@@ -133,6 +137,25 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `delay(1000)` and the `provision()` call (now gated on
   `needsProvisioning()`) are left in each sketch on purpose (baud rate
   and channel list are legitimately per-sketch).
+  `checkPendingCommand()`/`applyPendingCommand()` (added 2026-08-25) are the client half of
+  the server's one-shot `device.pending_command` test mailbox
+  (`larsi.org/sensors/sensor-node.php`'s `Command:`/`pending_command` docs): `log()` parses
+  a confirmed response's optional `Command: ...` line and persists it (free functions
+  `pendingCommand()`/`setPendingCommand()`/`clearPendingCommand()` in
+  `SensorNodeConfig.*`, deliberately not routed through the `SensorNodeConfig` struct/
+  `config_` -- same reason `firmwareVersionChanged()` is a free function, see below);
+  `applyPendingCommand()` (called from `loop()`, right after `log()`) restarts the device
+  if anything's pending, without clearing it first; `checkPendingCommand()` (called from
+  `setup()`, alongside `checkFirmwareVersion()`, before `begin()`) is what the restart
+  actually reaches -- it clears the flag (consumed on read regardless of outcome, so an
+  unrecognized command from a future firmware version doesn't retry forever) and
+  dispatches. Currently the only recognized value is `"open_portal"` (calls
+  `openPortal()`); anything else is logged and dropped. Deliberately mirrors
+  `checkFirmwareVersion()`'s defer-to-next-boot shape rather than acting on a command
+  immediately mid-`loop()` -- a persisted flag checked at the top of `setup()` is what a
+  future command needing to run *before* `begin()` connects (e.g. simulating a network
+  outage) will also need, so this establishes that dispatch point now rather than each
+  command inventing its own.
   `checkPortalButton()` only runs once, at the top of `setup()` --
   holding the pin while the device is already looping does nothing;
   it has to be held through an actual reset (button press or power

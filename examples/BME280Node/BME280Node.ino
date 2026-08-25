@@ -107,6 +107,7 @@ void setup() {
   delay(1000);
 
   node.checkFirmwareVersion(kFirmwareVersion);
+  node.checkPendingCommand();
   node.checkPortalButton(kResetPin);
   node.begin();
   if (node.needsProvisioning()) node.provision(kChannels);
@@ -148,10 +149,10 @@ void setup() {
 }
 
 void loop() {
-  float ch0 = bme.readTempC();                 // temperature C
-  float ch2 = bme.readFloatHumidity();         // humidity %
-  float ch3 = bme.readFloatPressure() / 100.0; // pressure hPa
-  float ch1 = bme.dewPointC();                 // dew point C
+  float ch0  = bme.readTempC();                 // temperature C
+  float ch2  = bme.readFloatHumidity();         // humidity %
+  float ch3  = bme.readFloatPressure() / 100.0; // pressure hPa
+  float ch1  = bme.dewPointC();                 // dew point C
   float ch15 = battery.readSOC();               // battery state of charge %
 
   std::vector<float> readings = {ch0, ch1, ch2, ch3, ch15};
@@ -159,6 +160,7 @@ void loop() {
   // Zipped positionally against kChannels -- picks up each entry's id/decimalPlaces from there.
   // No need to pad channels 4-14 by hand; log() fills the gap up to channel 15 itself.
   node.log(kChannels, readings);
+  node.applyPendingCommand();
 
   // "Current values" text screen -- entirely skipped if the OLED wasn't
   // detected at boot, so this is a no-op on a board with none wired up.

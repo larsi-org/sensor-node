@@ -21,6 +21,12 @@ struct SensorNodeConfig {
   // restricts entry to SensorNodePortal.cpp's kLogIntervals set.
   uint8_t logIntervalMinutes = 5;
 
+  // How many log() cycles a (future) buffering sketch should batch before actually reporting --
+  // sent to provision() so the server can size its own alerting tolerance accordingly. 1 (the
+  // default) means every cycle is reported immediately, matching today's behavior; this library
+  // doesn't do any buffering itself yet, so nothing reads this back apart from provision().
+  uint8_t reportEveryCycles = 1;
+
   bool isComplete() const { return ssids[0].length() > 0 && writeKey.length() == 16; }
 };
 
@@ -62,3 +68,19 @@ void markProvisionPending();
 // leaving it set on failure (no connectivity, server error, etc.) means the next boot tries
 // again instead of silently dropping the registration.
 void clearProvisionPending();
+
+// A one-shot test command delivered via a successful log() response's "Command: ..." line (see
+// SensorNode::checkPendingCommand()/applyPendingCommand()) -- read-only, doesn't write anything.
+// Free functions rather than a SensorNodeConfig field: checkPendingCommand() needs to read this
+// at the top of setup(), before begin() has ever called loadSensorNodeConfig(), the same reason
+// firmwareVersionChanged() above is a free function too.
+String pendingCommand();
+
+// Persists a newly-received command, overwriting any not-yet-applied one (last one delivered
+// wins). Call this from SensorNode::log() once a response actually carries one.
+void setPendingCommand(const String &command);
+
+// Clears the pending command. Call this as soon as checkPendingCommand() reads it, whether or
+// not the value was actually recognized -- an unrecognized command (e.g. from firmware that
+// predates it) should get dropped, not retried forever every boot.
+void clearPendingCommand();

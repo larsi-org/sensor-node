@@ -88,6 +88,19 @@ String buildLogIntervalOptions(uint8_t selected) {
   return options;
 }
 
+// Every value 1-12 is legal (unlike kLogIntervals' sparse allowed set), so this is a plain
+// range loop + constrain() in handleSave(), matching buildDeviceIdOptions() below rather than
+// buildLogIntervalOptions()'s membership-checked approach.
+String buildReportEveryOptions(uint8_t selected) {
+  String options;
+  for (uint8_t n = 1; n <= 12; n++) {
+    options += "<option value=\"" + String(n) + "\"";
+    if (n == selected) options += " selected";
+    options += ">" + (n == 1 ? String("Every cycle (no buffering)") : "Every " + String(n) + " cycles") + "</option>";
+  }
+  return options;
+}
+
 // Device IDs are 0-15 (larsi.org's flat sensor addressing is
 // 16*deviceId+channel) -- small enough that a dropdown rules out an
 // invalid value entirely, instead of relying on handleSave()'s
@@ -219,6 +232,8 @@ String buildFormPage() {
           "\" title=\"16 characters: a letter, then letters/digits/-/_ (surrounding spaces OK)\">";
   page += "<label>Log Frequency</label><select name=\"logInterval\">" +
           buildLogIntervalOptions(existing.logIntervalMinutes) + "</select>";
+  page += "<label>Report Every</label><select name=\"reportEvery\">" +
+          buildReportEveryOptions(existing.reportEveryCycles) + "</select>";
   page += "<button type=\"submit\">Save &amp; Reboot</button>";
   page += "</form></body></html>";
   return page;
@@ -241,6 +256,7 @@ void handleSave() {
   config.writeKey.trim();  // strip accidental leading/trailing whitespace from copy-paste
   uint8_t logInterval = (uint8_t)server.arg("logInterval").toInt();
   config.logIntervalMinutes = isValidLogInterval(logInterval) ? logInterval : 5;
+  config.reportEveryCycles = (uint8_t)constrain(server.arg("reportEvery").toInt(), 1, 12);
 
   if (newSsid.length() == 0) {
     server.send(400, "text/html", "<p>Wi-Fi network is required. <a href=\"/\">Back</a></p>");

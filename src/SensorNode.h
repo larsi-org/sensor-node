@@ -75,6 +75,16 @@ class SensorNode {
   // GND).
   void checkPortalButton(uint8_t pin, unsigned long wipeHoldMs = 5000);
 
+  // Checks for a command left over from a previous log() call (see log()'s doc comment below)
+  // and, if one's pending, clears it and dispatches it -- currently only "open_portal" is
+  // recognized (opens the setup portal, never returning), anything else is logged and ignored.
+  // A no-op if nothing's pending. Call this once at the top of setup(), alongside
+  // checkFirmwareVersion()/checkPortalButton() and before begin() -- see examples/BasicNode.
+  //
+  // This is the "next boot" half of the mechanism: applyPendingCommand() (below) is what
+  // actually triggers the reboot that brings execution back here with something to act on.
+  void checkPendingCommand();
+
   // Posts values, zipped positionally against channels -- values[i] is channels[i]'s reading,
   // using that entry's id (for wire position, within this node's configured device id: channel
   // deviceId*16 + id) and decimalPlaces (for rounding). channels is typically the same list
@@ -88,7 +98,18 @@ class SensorNode {
   // Positional, not id-keyed, so values has to list channels[0]'s reading first, channels[1]'s
   // second, etc. -- reordering channels without updating every values list built against it
   // would silently misfile data onto the wrong channel.
+  //
+  // A successful response may also carry a one-shot test command (a "Command: ..." line --
+  // see https://larsi.org/sensors/sensor-node.php), which gets persisted for
+  // applyPendingCommand()/checkPendingCommand() to act on -- log() itself never acts on it.
   bool log(const std::vector<SensorNodeChannel> &channels, const std::vector<float> &values);
+
+  // Restarts the device if log() persisted a pending command on this or an earlier call --
+  // otherwise a no-op. Deliberately doesn't clear the command itself (it's already persisted);
+  // the point of restarting is to bring the device back to checkPendingCommand(), at the top of
+  // the next setup(), which is what actually consumes it. Call this right after log() in loop()
+  // -- see examples/BasicNode.
+  void applyPendingCommand();
 
   // True if the setup portal saved settings since the last confirmed provision() call -- gate
   // provision() on this rather than calling it every boot (see examples/BasicNode): the portal

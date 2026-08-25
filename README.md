@@ -10,10 +10,13 @@ yet, or none in range), it opens an access point with a captive setup
 portal: pick a network from a live scan, enter the password, and set a
 device name (required -- defaults to `"Weather <last 6 MAC hex
 digits>"` when nothing's saved yet, so a fresh device never ships
-with a blank name), device id (0-15), write key, and log frequency
-(1, 2, 3, 5, 10, 15, 20, 30, or 60 minutes -- default 5). It saves
-the settings to flash (NVS) and reboots, then connects normally on
-every later boot.
+with a blank name), device id (0-15), write key, log frequency
+(1, 2, 3, 5, 10, 15, 20, 30, or 60 minutes -- default 5), and report
+frequency (1-12 cycles -- default 1, meaning every cycle is reported
+immediately; higher values are for a future buffering sketch this
+library doesn't implement yet, see `reportEveryCycles` below). It
+saves the settings to flash (NVS) and reboots, then connects normally
+on every later boot.
 
 Up to `SensorNodeConfig::kMaxNetworks` (3) networks are remembered,
 most-recently-added first -- a node that moves between a handful of
@@ -105,6 +108,15 @@ Library" libraries from the Library Manager.
   if `pin` reads high. Call once at the top of `setup()`, before
   `begin()` -- see `examples/BasicNode`/`examples/BME280Node` for the
   wiring (a button to GND).
+- `void checkPendingCommand()` -- checks for a one-shot test command left by an earlier
+  `log()` call (see below and [larsi.org/sensors/sensor-node.php](https://larsi.org/sensors/sensor-node.php)'s
+  `Command:`/`pending_command` docs), and if there is one, clears it and dispatches it.
+  Currently only `"open_portal"` is recognized (opens the setup portal, never returning);
+  anything else is logged and dropped rather than retried forever. A no-op if nothing's
+  pending. Call once at the top of `setup()`, alongside `checkFirmwareVersion()`/
+  `checkPortalButton()` and before `begin()` -- see `examples/BasicNode`. This is the
+  "next boot" half of the mechanism; `applyPendingCommand()` (below) is what actually
+  triggers the reboot that brings execution back here with something to act on.
 - `bool needsProvisioning() const` -- true if the setup portal saved
   settings since the last confirmed `provision()` call. Gate
   `provision()` on this instead of calling it every boot: a normal
@@ -145,12 +157,21 @@ Library" libraries from the Library Manager.
   see `examples/BME280Node`). A `NAN` value is left out of the request
   entirely, which the log endpoint treats as "skip this channel"
   rather than logging a zero. Returns whether the server confirmed the
-  data was logged.
+  data was logged. If the response also carries a `Command: ...` line, it's persisted for
+  `applyPendingCommand()`/`checkPendingCommand()` to act on -- `log()` itself never acts on
+  it.
+- `void applyPendingCommand()` -- restarts the device if `log()` persisted a pending
+  command on this or an earlier call, otherwise a no-op. Deliberately doesn't clear the
+  command itself; the point of restarting is to reach `checkPendingCommand()`, at the top
+  of the next `setup()`, which is what actually consumes it. Call this right after `log()`
+  in `loop()` -- see `examples/BasicNode`.
 - `const SensorNodeConfig &config() const` -- read-only access to the
   loaded settings (`ssids`/`passwords` arrays, `deviceName`,
-  `deviceId`, `writeKey`, `logIntervalMinutes`). Sketches read
+  `deviceId`, `writeKey`, `logIntervalMinutes`, `reportEveryCycles`). Sketches read
   `logIntervalMinutes` themselves to compute their own `loop()` delay
-  -- this library doesn't call `log()` on a timer itself.
+  -- this library doesn't call `log()` on a timer itself. `reportEveryCycles` isn't read by
+  this library at all yet (no buffering sketch exists here); it's only sent along to
+  `provision()` so the server can size its own alerting tolerance for whenever one does.
 
 ### `SensorNodeBattery`
 

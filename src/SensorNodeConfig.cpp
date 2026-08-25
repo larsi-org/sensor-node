@@ -17,6 +17,7 @@ bool loadSensorNodeConfig(SensorNodeConfig &config) {
   config.deviceId = prefs.getUChar("deviceId", 0);
   config.writeKey = prefs.getString("writeKey", "");
   config.logIntervalMinutes = prefs.getUChar("logInterval", 5);
+  config.reportEveryCycles = prefs.getUChar("reportEvery", 1);
   prefs.end();
   return config.isComplete();
 }
@@ -32,6 +33,7 @@ void saveSensorNodeConfig(const SensorNodeConfig &config) {
   prefs.putUChar("deviceId", config.deviceId);
   prefs.putString("writeKey", config.writeKey);
   prefs.putUChar("logInterval", config.logIntervalMinutes);
+  prefs.putUChar("reportEvery", config.reportEveryCycles);
   // Purges the retired deviceLocation key on any device that still has one saved from before
   // it was merged back into deviceName -- a no-op (remove() on an absent key just returns
   // false) once a device has already saved since this change.
@@ -80,5 +82,27 @@ void clearProvisionPending() {
   Preferences prefs;
   prefs.begin(kNamespace, false);
   prefs.putBool("provPending", false);
+  prefs.end();
+}
+
+String pendingCommand() {
+  Preferences prefs;
+  prefs.begin(kNamespace, true);
+  String command = prefs.getString("cmd", "");
+  prefs.end();
+  return command;
+}
+
+void setPendingCommand(const String &command) {
+  Preferences prefs;
+  prefs.begin(kNamespace, false);
+  prefs.putString("cmd", command);
+  prefs.end();
+}
+
+void clearPendingCommand() {
+  Preferences prefs;
+  prefs.begin(kNamespace, false);
+  prefs.putString("cmd", "");
   prefs.end();
 }

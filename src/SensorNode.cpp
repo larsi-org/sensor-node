@@ -15,6 +15,9 @@ namespace {
 
 const char *kServer = "larsi.org";
 
+// Currently the only recognized value for a pending command -- see checkPendingCommand().
+const char *kOpenPortalCommand = "open_portal";
+
 // Reduces a free-text device name to characters safe for a network
 // hostname (RFC 1123: letters, digits, hyphens; can't start/end with
 // a hyphen). WiFi.setHostname() itself doesn't validate or reject
@@ -184,6 +187,22 @@ void SensorNode::checkFirmwareVersion(uint32_t version) {
   runSensorNodeSetupPortal(version);  // never returns; reboots on save
 }
 
+void SensorNode::checkPendingCommand() {
+  String command = pendingCommand();
+  if (command.length() == 0) return;
+
+  // Consumed on read regardless of outcome -- see the .h comment: an unrecognized command
+  // (e.g. one a future firmware version added that this one predates) shouldn't retry forever.
+  clearPendingCommand();
+
+  if (command == kOpenPortalCommand) {
+    Serial.println("[SensorNode] Pending command \"open_portal\" -- opening setup portal.");
+    openPortal();  // never returns; reboots on save
+  } else {
+    Serial.printf("[SensorNode] Unknown pending command \"%s\" -- ignoring.\n", command.c_str());
+  }
+}
+
 void SensorNode::checkPortalButton(uint8_t pin, unsigned long wipeHoldMs) {
   pinMode(pin, INPUT_PULLUP);
   if (digitalRead(pin) != LOW) return;
@@ -251,7 +270,28 @@ bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::
 
   Serial.printf("[SensorNode] POST /sensors/log (device=%d, data=%s):\n%s\n", config_.deviceId, data.c_str(), response.c_str());
 
-  return response.indexOf("Data logged") >= 0;
+  bool confirmed = response.indexOf("Data logged") >= 0;
+  if (confirmed) {
+    // Only trust a "Command: ..." line alongside a confirmed log -- the server only ever sends
+    // one there, but a malformed/garbled response shouldn't be trusted to carry a command either.
+    int cmdIdx = response.indexOf("Command: ");
+    if (cmdIdx >= 0) {
+      int lineEnd = response.indexOf('\n', cmdIdx);
+      String command = response.substring(cmdIdx + 9, lineEnd >= 0 ? lineEnd : response.length());
+      command.trim();
+      if (command.length() > 0) setPendingCommand(command);
+    }
+  }
+
+  return confirmed;
+}
+
+void SensorNode::applyPendingCommand() {
+  if (pendingCommand().length() == 0) return;
+  // Doesn't clear the command itself -- see the .h comment: it's already persisted, and staying
+  // set is what lets checkPendingCommand() pick it up right after this restart.
+  Serial.println("[SensorNode] Pending command received -- restarting to apply.");
+  ESP.restart();
 }
 
 bool SensorNode::needsProvisioning() const { return provisionPending(); }
@@ -268,7 +308,7 @@ bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
 
   String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) +
                 "&name=" + config_.deviceName + "&logInterval=" + String(config_.logIntervalMinutes) +
-                "&channels=" + channelList;
+                "&reportEvery=" + String(config_.reportEveryCycles) + "&channels=" + channelList;
   String response = postToServer(serverIp_, "/sensors/provision", body);
 
   Serial.printf("[SensorNode] POST /sensors/provision:\n%s\n", response.c_str());
