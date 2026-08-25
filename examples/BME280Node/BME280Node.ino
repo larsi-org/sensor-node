@@ -142,10 +142,11 @@ void setup() {
   // The very first reading right after boot occasionally comes back as a
   // fixed garbage value (seen in production: identical bogus temp/humidity/
   // pressure on two separate boots) -- likely the sensor or I2C bus not yet
-  // settled amid WiFi connect/provisioning right beforehand. Give it one
-  // full log interval to settle, capped at 1 minute so a long-interval
-  // device doesn't sit dark for its whole first cycle.
-  delay(min(node.config().logIntervalMinutes, (uint8_t)1) * 60UL * 1000);
+  // settled amid WiFi connect/provisioning right beforehand. Give it a
+  // minute to settle -- fixed, not derived from logIntervalMinutes (whose
+  // portal-enforced minimum is already 1), so there's no long-interval
+  // device sitting dark for its whole first cycle to guard against.
+  delay(60UL * 1000);
 }
 
 void loop() {
