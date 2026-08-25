@@ -9,21 +9,26 @@
 // SensorNode-Setup-XXXXXX access point, and the reset-button hold
 // behavior) -- identical here.
 
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_SH110X.h>
 #include <SensorNode.h>
 #include <SensorNodeBattery.h>
 #include <SparkFunBME280.h>
 #include <Wire.h>
 
-// Optional Adafruit FeatherWing OLED (128x64, SSD1306, I2C address 0x3C --
-// shares the Qwiic bus with the BME280/MAX17048). Detected at boot via
-// oled.begin()'s return value, same pattern as bme.beginI2C()/battery.begin()
-// below -- if it's not physically connected, oledPresent stays false and
-// every display call in loop() is skipped entirely.
+// Optional Adafruit FeatherWing OLED (128x64, SH1107 -- Adafruit switched this
+// FeatherWing from SSD1306 to SH1107 on newer boards; same footprint but a
+// different controller, wrong library gives a garbled top half/black bottom
+// half, not a clean failure -- I2C address 0x3C, shares the Qwiic bus with the
+// BME280/MAX17048). Detected at boot via oled.begin()'s return value, same
+// pattern as bme.beginI2C()/battery.begin() below -- if it's not physically
+// connected, oledPresent stays false and every display call in loop() is
+// skipped entirely. SH1107's native orientation is portrait (tall x wide, not
+// wide x tall like SSD1306's constructor) -- constructor takes height then
+// width, and setRotation(1) below rotates it back to landscape.
 const int kScreenWidth = 128;
 const int kScreenHeight = 64;
 const uint8_t kOledAddress = 0x3C;
-Adafruit_SSD1306 oled(kScreenWidth, kScreenHeight, &Wire, -1);
+Adafruit_SH1107 oled(kScreenHeight, kScreenWidth, &Wire);
 bool oledPresent = false;
 String oledTitle;  // deviceName, else a hardcoded fallback -- set in setup()
 
@@ -99,11 +104,12 @@ void setup() {
   if (!battery.begin()) {
     Serial.println("MAX17048 not detected -- battery channel will read NAN.");
   }
-  oledPresent = oled.begin(SSD1306_SWITCHCAPVCC, kOledAddress);
+  oledPresent = oled.begin(kOledAddress, true);
   if (!oledPresent) {
     Serial.println("OLED not detected -- skipping display.");
   } else {
-    oled.setTextColor(SSD1306_WHITE);
+    oled.setRotation(1);
+    oled.setTextColor(SH110X_WHITE);
     oled.setTextSize(1);
   }
 
