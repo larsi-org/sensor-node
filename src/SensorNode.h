@@ -104,11 +104,13 @@ class SensorNode {
   // applyPendingCommand()/checkPendingCommand() to act on -- log() itself never acts on it.
   bool log(const std::vector<SensorNodeChannel> &channels, const std::vector<float> &values);
 
-  // Restarts the device if log() persisted a pending command on this or an earlier call --
-  // otherwise a no-op. Deliberately doesn't clear the command itself (it's already persisted);
-  // the point of restarting is to bring the device back to checkPendingCommand(), at the top of
-  // the next setup(), which is what actually consumes it. Call this right after log() in loop()
-  // -- see examples/BasicNode.
+  // Acts on a command log() persisted on this or an earlier call -- a no-op if nothing's
+  // pending. A small allowlist of commands that don't need begin() to not have connected yet
+  // (currently just "scan_i2c") run immediately, right here, and clear the flag themselves.
+  // Everything else restarts the device instead, without clearing the flag -- the point of
+  // restarting is to bring the device back to checkPendingCommand(), at the top of the next
+  // setup(), which is what actually consumes those. Call this right after log() in loop() --
+  // see examples/BasicNode.
   void applyPendingCommand();
 
   // True if the setup portal saved settings since the last confirmed provision() call -- gate

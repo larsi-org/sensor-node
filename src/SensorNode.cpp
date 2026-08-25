@@ -1,5 +1,6 @@
 #include "SensorNode.h"
 
+#include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <WiFiUdp.h>
@@ -15,8 +16,28 @@ namespace {
 
 const char *kServer = "larsi.org";
 
-// Currently the only recognized value for a pending command -- see checkPendingCommand().
+// Recognized pending command values -- see checkPendingCommand() (defers to next boot) and
+// applyPendingCommand() (runs immediately) for which is which.
 const char *kOpenPortalCommand = "open_portal";
+const char *kScanI2CCommand = "scan_i2c";
+
+// Sweeps every I2C address on whatever Wire is already using (defensive Wire.begin() -- this
+// may run on a sketch that never touched Wire itself, e.g. BasicNode) and returns a comma-joined
+// list of hex addresses that ACKed, or "none". Bench-testing aid only (see
+// applyPendingCommand()): prints to Serial, never sent to the server -- whoever triggers this
+// is physically at the device with a serial connection already open.
+String scanI2CBus() {
+  Wire.begin();
+  String result;
+  for (uint8_t address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    if (Wire.endTransmission() == 0) {
+      if (result.length() > 0) result += ",";
+      result += "0x" + String(address, HEX);
+    }
+  }
+  return result.length() > 0 ? result : "none";
+}
 
 // Reduces a free-text device name to characters safe for a network
 // hostname (RFC 1123: letters, digits, hyphens; can't start/end with
@@ -287,9 +308,19 @@ bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::
 }
 
 void SensorNode::applyPendingCommand() {
-  if (pendingCommand().length() == 0) return;
-  // Doesn't clear the command itself -- see the .h comment: it's already persisted, and staying
-  // set is what lets checkPendingCommand() pick it up right after this restart.
+  String command = pendingCommand();
+  if (command.length() == 0) return;
+
+  if (command == kScanI2CCommand) {
+    // Doesn't need begin() to not have connected yet, unlike open_portal -- runs right here.
+    Serial.printf("[SensorNode] I2C scan: %s\n", scanI2CBus().c_str());
+    clearPendingCommand();
+    return;
+  }
+
+  // Anything else (open_portal, or a command this build doesn't know how to run immediately)
+  // defers to the next boot's checkPendingCommand() -- doesn't clear the command itself, since
+  // it's already persisted and staying set is what lets that check pick it up after this restart.
   Serial.println("[SensorNode] Pending command received -- restarting to apply.");
   ESP.restart();
 }

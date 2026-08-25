@@ -144,18 +144,30 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `pendingCommand()`/`setPendingCommand()`/`clearPendingCommand()` in
   `SensorNodeConfig.*`, deliberately not routed through the `SensorNodeConfig` struct/
   `config_` -- same reason `firmwareVersionChanged()` is a free function, see below);
-  `applyPendingCommand()` (called from `loop()`, right after `log()`) restarts the device
-  if anything's pending, without clearing it first; `checkPendingCommand()` (called from
-  `setup()`, alongside `checkFirmwareVersion()`, before `begin()`) is what the restart
-  actually reaches -- it clears the flag (consumed on read regardless of outcome, so an
+  `applyPendingCommand()` (called from `loop()`, right after `log()`) is a small allowlist
+  of commands that don't need `begin()` to not have connected yet -- currently just
+  `"scan_i2c"` (added 2026-08-25: sweeps every I2C address, `Serial.printf`s whatever
+  ACKed, `clearPendingCommand()`s itself, returns -- see `scanI2CBus()`, an anonymous-
+  namespace helper needing `SensorNode.cpp`'s only `#include <Wire.h>`, since `Wire.begin()`
+  had until now always been the sketch's own job, e.g. `BME280Node.ino`). Deliberately
+  Serial-only, never reported back to the server: it's a bench-testing aid for whoever's
+  physically at the device with a serial connection already open (see
+  [[bench-test-serial-only]]), so there's no reason to round-trip the result anywhere.
+  Everything else falls through to `applyPendingCommand()`'s default -- restarts the
+  device, without clearing the flag first; `checkPendingCommand()` (called from `setup()`,
+  alongside `checkFirmwareVersion()`, before `begin()`) is what that restart actually
+  reaches -- it clears the flag (consumed on read regardless of outcome, so an
   unrecognized command from a future firmware version doesn't retry forever) and
-  dispatches. Currently the only recognized value is `"open_portal"` (calls
-  `openPortal()`); anything else is logged and dropped. Deliberately mirrors
-  `checkFirmwareVersion()`'s defer-to-next-boot shape rather than acting on a command
-  immediately mid-`loop()` -- a persisted flag checked at the top of `setup()` is what a
-  future command needing to run *before* `begin()` connects (e.g. simulating a network
-  outage) will also need, so this establishes that dispatch point now rather than each
-  command inventing its own.
+  dispatches. Currently the only value it recognizes is `"open_portal"` (calls
+  `openPortal()`); anything else is logged and dropped. This split -- an allowlist of
+  immediate commands in `applyPendingCommand()`, everything else deferred to
+  `checkPendingCommand()` at the next boot -- is deliberate: `checkPendingCommand()`
+  mirrors `checkFirmwareVersion()`'s defer-to-next-boot shape because a command needing to
+  run *before* `begin()` connects (`open_portal` today; simulating a network outage is the
+  standing example of a future one) has no other way to do that, while a command like
+  `scan_i2c` that doesn't share that constraint gets to skip the reboot round-trip
+  entirely -- `applyPendingCommand()`'s allowlist is what makes that call per-command
+  instead of forcing every command through the slower path.
   `checkPortalButton()` only runs once, at the top of `setup()` --
   holding the pin while the device is already looping does nothing;
   it has to be held through an actual reset (button press or power

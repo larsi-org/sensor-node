@@ -115,8 +115,10 @@ Library" libraries from the Library Manager.
   anything else is logged and dropped rather than retried forever. A no-op if nothing's
   pending. Call once at the top of `setup()`, alongside `checkFirmwareVersion()`/
   `checkPortalButton()` and before `begin()` -- see `examples/BasicNode`. This is the
-  "next boot" half of the mechanism; `applyPendingCommand()` (below) is what actually
-  triggers the reboot that brings execution back here with something to act on.
+  "next boot" half of the mechanism, for commands that can't run until `begin()` hasn't
+  connected yet (like `open_portal`); `applyPendingCommand()` (below) is what triggers the
+  reboot that brings execution back here for those -- a command it can run immediately
+  instead (like `scan_i2c`) never reaches this method at all.
 - `bool needsProvisioning() const` -- true if the setup portal saved
   settings since the last confirmed `provision()` call. Gate
   `provision()` on this instead of calling it every boot: a normal
@@ -160,11 +162,18 @@ Library" libraries from the Library Manager.
   data was logged. If the response also carries a `Command: ...` line, it's persisted for
   `applyPendingCommand()`/`checkPendingCommand()` to act on -- `log()` itself never acts on
   it.
-- `void applyPendingCommand()` -- restarts the device if `log()` persisted a pending
-  command on this or an earlier call, otherwise a no-op. Deliberately doesn't clear the
-  command itself; the point of restarting is to reach `checkPendingCommand()`, at the top
-  of the next `setup()`, which is what actually consumes it. Call this right after `log()`
-  in `loop()` -- see `examples/BasicNode`.
+- `void applyPendingCommand()` -- acts on a command `log()` persisted on this or an
+  earlier call, otherwise a no-op. A small allowlist of commands that don't need `begin()`
+  to not have connected yet run immediately, right here, and clear the flag themselves --
+  currently just `"scan_i2c"` (sweeps every I2C address on whatever `Wire` is already
+  using and prints the result to `Serial`, e.g. `[SensorNode] I2C scan: 0x36,0x3C,0x77` or
+  `...: none`; a bench-testing aid only -- never sent to the server, since whoever
+  triggers it is physically at the device with a serial connection already open).
+  Everything else (`"open_portal"`, or a command this build doesn't recognize as safe to
+  run immediately) restarts the device instead, without clearing the flag -- the point of
+  restarting is to reach `checkPendingCommand()`, at the top of the next `setup()`, which
+  is what actually consumes those. Call this right after `log()` in `loop()` -- see
+  `examples/BasicNode`.
 - `const SensorNodeConfig &config() const` -- read-only access to the
   loaded settings (`ssids`/`passwords` arrays, `deviceName`,
   `deviceId`, `writeKey`, `logIntervalMinutes`, `reportEveryCycles`). Sketches read
