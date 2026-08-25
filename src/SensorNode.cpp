@@ -267,7 +267,8 @@ bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
   }
 
   String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) +
-                "&name=" + config_.deviceName + "&channels=" + channelList;
+                "&name=" + config_.deviceName + "&logInterval=" + String(config_.logIntervalMinutes) +
+                "&channels=" + channelList;
   String response = postToServer(serverIp_, "/sensors/provision", body);
 
   Serial.printf("[SensorNode] POST /sensors/provision:\n%s\n", response.c_str());
