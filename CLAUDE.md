@@ -78,8 +78,9 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   is typically the same list passed to `provision()`, but doesn't have
   to match exactly -- `log()` only reads it for `id`/`decimalPlaces`
   lookups.
-  `SensorNodeChannel` also carries `label = ""` and `decimalPlaces = 2`
-  -- `provision()` never reads either (only `id`/`sensor`/`property`/
+  `SensorNodeChannel` also carries `label = ""` and `decimalPlaces = 1`
+  (most hobby-grade sensors' real accuracy backs up one decimal place,
+  not two) -- `provision()` never reads either (only `id`/`sensor`/`property`/
   `unit` go on the wire), they exist so a sketch's one per-channel
   table can feed both `provision()`'s identity and `log()`/a display's
   formatting (`examples/BME280Node`: `kChannels[i].label`,

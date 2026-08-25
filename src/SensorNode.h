@@ -15,15 +15,16 @@
 // below); label is unused by this library at all, it's just there so a sketch with a display
 // has one place per channel to hold a short form of property (which is meant for the
 // server/reports and can run long, e.g. "Dew Point Temperature" vs. a 21-char OLED line).
-// Both default (label to "", decimalPlaces to 2) so a sketch that doesn't care about either
-// can leave them unset.
+// Both default (label to "", decimalPlaces to 1 -- most hobby-grade sensors' real accuracy
+// backs up one decimal place, not two) so a sketch that doesn't care about either can leave
+// them unset.
 struct SensorNodeChannel {
   uint8_t id;
   const char *sensor;
   const char *property;
   const char *unit;
   const char *label = "";
-  uint8_t decimalPlaces = 2;
+  uint8_t decimalPlaces = 1;
 };
 
 class SensorNode {

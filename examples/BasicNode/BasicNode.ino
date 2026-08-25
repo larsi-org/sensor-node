@@ -36,8 +36,8 @@ const uint32_t kFirmwareVersion = 1;
 // Shared by provision() (only actually posted when needsProvisioning() is true -- see setup()
 // below) and log() (zipped positionally against the values list there -- kChannels[0] has to
 // stay temperature, kChannels[1] humidity, matching the order below; add a trailing precision,
-// e.g. {0, "YourSensor", "Temperature", "C", "", 1}, to match your real sensor's actual
-// accuracy instead of the default 2). Replace with the real channels for your sketch.
+// e.g. {1, "YourSensor", "Humidity", "%", "", 0}, to match your real sensor's actual accuracy
+// instead of the default 1). Replace with the real channels for your sketch.
 const std::vector<SensorNodeChannel> kChannels = {
     {0, "YourSensor", "Temperature", "C"},
     {1, "YourSensor", "Humidity", "%"},

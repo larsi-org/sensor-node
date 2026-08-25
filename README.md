@@ -112,7 +112,7 @@ Library" libraries from the Library Manager.
   `begin()` returns.
 - `bool provision(const std::vector<SensorNodeChannel> &channels)` --
   registers this device and its channels with the server. Each
-  `SensorNodeChannel` is `{id, sensor, property, unit, label = "", decimalPlaces = 2}`
+  `SensorNodeChannel` is `{id, sensor, property, unit, label = "", decimalPlaces = 1}`
   (e.g. `{0, "BME280", "Temperature", "C", "Temp", 1}`), fixed by what's
   wired to the sketch. `label`/`decimalPlaces` are never sent to the
   server -- `provision()` only reads `id`/`sensor`/`property`/`unit` --
