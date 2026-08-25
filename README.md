@@ -171,11 +171,17 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
 
 - The server is hardcoded to `larsi.org` -- this library is for nodes
   reporting there, not a generic multi-backend client.
-- TLS is verified against the specific root CA `larsi.org`'s
-  certificate currently chains to (GoDaddy), pinned in
-  `src/SensorNode.cpp`. If the site ever switches certificate
-  providers, logging will start failing with a TLS handshake error
-  until that constant is updated to match.
+- TLS is verified against a curated 5-root CA bundle
+  (`src/SensorNodeCertBundle.h`), not a single pinned cert -- covers
+  larsi.org's current provider (GoDaddy) plus the ones it would
+  realistically end up on if that changes (Let's Encrypt, GlobalSign,
+  Sectigo, DigiCert), picked from public CA market-share data. See
+  that header for the full reasoning and the removal order if flash
+  pressure ever forces trimming it back down. A full public-CA-store
+  bundle was considered and ruled out -- ~55KB of cert data plus ~71KB
+  of extra linked code to search/verify a bundle at all, versus a
+  single pinned cert's ~1.4KB, doesn't fit this device's flash budget
+  (it was already at 92% before any bundle).
 - The setup portal's access point is open (no password) and only runs
   while unconfigured/disconnected -- get a write key first (see the
   [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).

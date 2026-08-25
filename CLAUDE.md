@@ -195,14 +195,29 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 
 ## TLS
 
-`SensorNode.cpp` pins the specific root CA larsi.org's cert chain
-currently validates against (GoDaddy's "Go Daddy Root Certificate
-Authority - G2", self-signed, valid to 2037), not a generic trust
-store or `setInsecure()`. If larsi.org's certificate provider ever
-changes, TLS connections start failing and this constant needs
-re-pinning to match -- get the real chain (e.g.
-`openssl s_client -connect larsi.org:443 -showcerts`) before touching
-it, don't guess or hand-type a replacement.
+`SensorNode.cpp` verifies against a curated 5-root CA bundle
+(`src/SensorNodeCertBundle.h`, via `WiFiClientSecure::setCACertBundle()`
++ `connect()` with a null `CA_cert` so it falls through to the bundle
+path -- see `ssl_client.cpp`'s `rootCABuff != NULL` / `useRootCABundle`
+branching if that ever needs re-verifying against a core update), not
+a single pinned cert or a generic trust store or `setInsecure()`. That
+header has the full reasoning, the five CAs picked and why, and --
+important if flash pressure ever forces trimming the bundle back
+down -- the order to remove them in. Don't hand-edit the byte array
+there; regenerate it per that header's instructions.
+
+A single pinned cert (what this used to do) breaks the instant
+larsi.org's certificate provider changes; a full public-CA-store
+bundle was tried and ruled out by actually compiling it -- ~55KB of
+cert data plus ~71KB of extra linked code (mbedTLS's bundle search/
+verify path isn't linked at all for a single pinned cert) overflows
+this device's flash, which was already at 92% before any bundle. The
+curated 5 -- ISRG Root X1 (Let's Encrypt), GlobalSign Root R46,
+USERTrust RSA Certification Authority (Sectigo), Go Daddy Root
+Certificate Authority - G2 (current), DigiCert Global Root G2 --
+cover ~94% of the web by W3Techs' market-share survey at a cost of
+~2.8KB data + the ~71KB fixed bundle-support overhead, landing at 97%
+flash on `BME280Node`.
 
 ## Conventions
 
