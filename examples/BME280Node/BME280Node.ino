@@ -143,9 +143,9 @@ void setup() {
   // fixed garbage value (seen in production: identical bogus temp/humidity/
   // pressure on two separate boots) -- likely the sensor or I2C bus not yet
   // settled amid WiFi connect/provisioning right beforehand. Give it one
-  // full log interval to settle, capped at 3 minutes so a long-interval
+  // full log interval to settle, capped at 1 minute so a long-interval
   // device doesn't sit dark for its whole first cycle.
-  delay(min(node.config().logIntervalMinutes, (uint8_t)3) * 60UL * 1000);
+  delay(min(node.config().logIntervalMinutes, (uint8_t)1) * 60UL * 1000);
 }
 
 void loop() {
