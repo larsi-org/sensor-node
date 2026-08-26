@@ -21,10 +21,11 @@ struct SensorNodeConfig {
   // restricts entry to SensorNodePortal.cpp's kLogIntervals set.
   uint8_t logIntervalMinutes = 5;
 
-  // How many log() cycles a (future) buffering sketch should batch before actually reporting --
-  // sent to provision() so the server can size its own alerting tolerance accordingly. 1 (the
-  // default) means every cycle is reported immediately, matching today's behavior; this library
-  // doesn't do any buffering itself yet, so nothing reads this back apart from provision().
+  // How many log() calls SensorNode::log() batches into its RTC ring buffer before actually
+  // flushing to the server -- sent to provision() so the server can size its own alerting
+  // tolerance accordingly (see this repo's CLAUDE.md/README.md for the ring buffer design). 1
+  // (the default) means every call flushes immediately, matching this library's original
+  // unbuffered behavior.
   uint8_t reportEveryCycles = 1;
 
   bool isComplete() const { return ssids[0].length() > 0 && writeKey.length() == 16; }

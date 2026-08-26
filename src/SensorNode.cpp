@@ -8,6 +8,7 @@
 #include <time.h>
 
 #include <cctype>
+#include <cstring>
 
 #include "SensorNodePortal.h"
 #include "SensorNodeCertBundle.h"
@@ -20,6 +21,42 @@ const char *kServer = "larsi.org";
 // applyPendingCommand() (runs immediately) for which is which.
 const char *kOpenPortalCommand = "open_portal";
 const char *kScanI2CCommand = "scan_i2c";
+
+// log()'s buffer: a fixed-size ring living in RTC slow memory, which survives deep sleep and
+// ESP.restart() (but not a power-on/EN reset -- see ensureRingInitialized() below). Sized to the
+// worst case (kMaxChannels, matching log()'s own byId[] below), not whatever a given sketch
+// actually reports, so this struct's shape never depends on which sketch includes the library.
+// head/tail are ever-increasing counters (not pre-masked) so a full-buffer eviction is just
+// "advance both" with no separate wraparound bookkeeping; head also doubles as the flush-cadence
+// counter in log() below, since exactly one push happens per call.
+const uint8_t kRingCapacity = 64;
+const uint8_t kMaxChannels = 16;
+const uint32_t kRingMagic = 0x53454e31;  // "SEN1" -- canary distinguishing real ring state from
+                                          // undefined RTC memory content on a cold power-on boot
+
+struct RTCRingSlot {
+  uint32_t epoch;
+  float values[kMaxChannels];  // byId, NAN = channel not reported that cycle
+};
+
+RTC_DATA_ATTR struct {
+  uint32_t magic;
+  uint32_t head;  // next write index; slot = head & (kRingCapacity - 1)
+  uint32_t tail;  // oldest not-yet-flushed index; slot = tail & (kRingCapacity - 1)
+  RTCRingSlot slots[kRingCapacity];
+} rtcRing;
+
+// A power-on/EN reset leaves RTC memory content undefined -- deep-sleep wake and
+// ESP.restart() both preserve it, but this guard is what tells the two cases apart, so a
+// physical reflash (which resets via EN) starts with an empty buffer rather than reading
+// garbage as ring state. That also means a reflash silently drops whatever was still
+// queued -- an accepted trade-off, not a bug.
+void ensureRingInitialized() {
+  if (rtcRing.magic == kRingMagic) return;
+  rtcRing.magic = kRingMagic;
+  rtcRing.head = 0;
+  rtcRing.tail = 0;
+}
 
 // Sweeps every I2C address on whatever Wire is already using (defensive Wire.begin() -- this
 // may run on a sketch that never touched Wire itself, e.g. BasicNode) and returns a comma-joined
@@ -247,18 +284,18 @@ bool SensorNode::resolveServerIp() {
 }
 
 bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::vector<float> &values) {
-  if (WiFi.status() != WL_CONNECTED) return false;
-  if (!resolveServerIp()) return false;
-
   // Channels 0-15 -- see SensorNodeChannel's id comment. Laid out sparsely by id here (not by
-  // position within values/channels) so the loop below can serialize them in wire order
-  // regardless of what order the caller listed channels in.
-  const uint8_t kMaxChannels = 16;
+  // position within values/channels) so the ring push and the serialization loop below can
+  // both walk them in wire order regardless of what order the caller listed channels in.
   float byId[kMaxChannels];
   uint8_t decimalPlacesById[kMaxChannels];
-  for (uint8_t id = 0; id < kMaxChannels; id++) byId[id] = NAN;
+  for (uint8_t id = 0; id < kMaxChannels; id++) {
+    byId[id] = NAN;
+    decimalPlacesById[id] = 1;  // a buffered older slot's id not in this call's channels (the
+                                 // channel list changing between calls, which no real sketch
+                                 // does) would otherwise read this uninitialized
+  }
 
-  uint8_t highestId = 0;
   // Zipped, not id-keyed: values[i] is channels[i]'s reading -- see log()'s header comment on
   // why that means channels' order can't change without every values list built against it
   // changing to match.
@@ -267,25 +304,53 @@ bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::
     if (id >= kMaxChannels) continue;  // shouldn't happen; guards a bad id
     byId[id] = values[i];
     decimalPlacesById[id] = channels[i].decimalPlaces;
-    if (id > highestId) highestId = id;
   }
 
-  String data;
-  for (uint8_t id = 0; id <= highestId; id++) {
-    if (id > 0) data += ",";
-    // (unsigned int) cast: ESP32 core's String(float, unsigned int) is otherwise ambiguous
-    // against its other explicit String(..., unsigned char) overloads when given a uint8_t
-    // directly -- neither is a strictly better match across both arguments.
-    if (!isnan(byId[id])) data += String(byId[id], (unsigned int)decimalPlacesById[id]);
+  // Buffer first, unconditionally -- every wake's reading is durably queued in the RTC ring
+  // regardless of whether this wake also attempts a flush below, so a failed/skipped flush
+  // never loses a reading, just defers it.
+  ensureRingInitialized();
+  RTCRingSlot &slot = rtcRing.slots[rtcRing.head & (kRingCapacity - 1)];
+  slot.epoch = (uint32_t)time(nullptr);
+  memcpy(slot.values, byId, sizeof(byId));
+  rtcRing.head++;
+  if (rtcRing.head - rtcRing.tail > kRingCapacity) {
+    rtcRing.tail++;  // buffer's full -- evict the oldest unflushed entry to keep tail valid
   }
 
-  String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) + "&data=" + data;
+  // Flush cadence: every reportEveryCycles-th wake, reusing head itself as the wake counter
+  // (exactly one push happens per call, so no separate counter is needed). reportEveryCycles
+  // == 1 (the default, and every device's setting until re-provisioned) flushes every call --
+  // identical to this method's behavior before buffering existed.
+  if (rtcRing.head % config_.reportEveryCycles != 0) return true;  // queued, nothing to send yet
+
+  if (WiFi.status() != WL_CONNECTED) return false;  // still queued -- next flush wake retries
+  if (!resolveServerIp()) return false;
+
+  uint32_t now = (uint32_t)time(nullptr);
+  String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId);
+  for (uint32_t i = rtcRing.tail; i != rtcRing.head; i++) {
+    const RTCRingSlot &entry = rtcRing.slots[i & (kRingCapacity - 1)];
+    String data;
+    for (uint8_t id = 0; id < kMaxChannels; id++) {
+      if (id > 0) data += ",";
+      // (unsigned int) cast: ESP32 core's String(float, unsigned int) is otherwise ambiguous
+      // against its other explicit String(..., unsigned char) overloads when given a uint8_t
+      // directly -- neither is a strictly better match across both arguments.
+      if (!isnan(entry.values[id])) data += String(entry.values[id], (unsigned int)decimalPlacesById[id]);
+    }
+    uint32_t offset = now > entry.epoch ? now - entry.epoch : 0;
+    body += "&data[]=" + data + "&t[]=" + String(offset);
+  }
+
   String response = postToServer(serverIp_, "/sensors/log", body);
 
-  Serial.printf("[SensorNode] POST /sensors/log (device=%d, data=%s):\n%s\n", config_.deviceId, data.c_str(), response.c_str());
+  Serial.printf("[SensorNode] POST /sensors/log (device=%d, body=%s):\n%s\n", config_.deviceId, body.c_str(), response.c_str());
 
   bool confirmed = response.indexOf("Data logged") >= 0;
   if (confirmed) {
+    rtcRing.tail = rtcRing.head;  // everything just sent is flushed
+
     // Only trust a "Command: ..." line alongside a confirmed log -- the server only ever sends
     // one there, but a malformed/garbled response shouldn't be trusted to carry a command either.
     int cmdIdx = response.indexOf("Command: ");

@@ -88,22 +88,31 @@ class SensorNode {
   // actually triggers the reboot that brings execution back here with something to act on.
   void checkPendingCommand();
 
-  // Posts values, zipped positionally against channels -- values[i] is channels[i]'s reading,
+  // Buffers values, zipped positionally against channels -- values[i] is channels[i]'s reading,
   // using that entry's id (for wire position, within this node's configured device id: channel
   // deviceId*16 + id) and decimalPlaces (for rounding). channels is typically the same list
   // passed to provision(). A NAN entry skips that channel (matching the log endpoint's "blank
-  // value" semantics); log() fills any lower, unmentioned ids in between with a skipped value
-  // itself, matching the log endpoint's position-addressed wire format. values may be shorter
-  // than channels to report only the first several (e.g. skip a channel a display also
-  // truncates to) -- anything past values.size() just isn't sent. Returns true once the server
-  // confirms the data was logged.
+  // value" semantics). values may be shorter than channels to report only the first several
+  // (e.g. skip a channel a display also truncates to) -- anything past values.size() just isn't
+  // sent.
   //
   // Positional, not id-keyed, so values has to list channels[0]'s reading first, channels[1]'s
   // second, etc. -- reordering channels without updating every values list built against it
   // would silently misfile data onto the wrong channel.
   //
-  // A successful response may also carry a one-shot test command (a "Command: ..." line --
-  // see https://larsi.org/sensors/sensor-node.php), which gets persisted for
+  // Every call queues its reading in a fixed 64-entry RTC-memory ring buffer first,
+  // unconditionally -- so a call never loses data, even if this wake doesn't also flush (below)
+  // or the flush fails. Only every config().reportEveryCycles-th call actually attempts to send
+  // anything, batching everything queued since the last confirmed flush into one request (see
+  // https://larsi.org/sensors/sensor-node.php's Batched Reports). reportEveryCycles == 1 (the
+  // default) flushes every call, same as before buffering existed. A queued-but-not-this-wake
+  // call returns true (queued, nothing was supposed to send yet); a flush wake returns true only
+  // once the server confirms the batch was logged -- a false return leaves everything queued for
+  // the next flush attempt to retry, combined with whatever's accumulated since. The ring holds
+  // only the most recent 64 unflushed readings -- a longer outage silently evicts the oldest.
+  //
+  // A successful flush's response may also carry a one-shot test command (a "Command: ..." line
+  // -- see https://larsi.org/sensors/sensor-node.php), which gets persisted for
   // applyPendingCommand()/checkPendingCommand() to act on -- log() itself never acts on it.
   bool log(const std::vector<SensorNodeChannel> &channels, const std::vector<float> &values);
 

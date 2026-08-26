@@ -13,8 +13,8 @@ digits>"` when nothing's saved yet, so a fresh device never ships
 with a blank name), device id (0-15), write key, log frequency
 (1, 2, 3, 5, 10, 15, 20, 30, or 60 minutes -- default 5), and report
 frequency (1-12 cycles -- default 1, meaning every cycle is reported
-immediately; higher values are for a future buffering sketch this
-library doesn't implement yet, see `reportEveryCycles` below). It
+immediately; higher values batch that many cycles into one flush, see
+`log()`/`reportEveryCycles` below). It
 saves the settings to flash (NVS) and reboots, then connects normally
 on every later boot.
 
@@ -145,7 +145,7 @@ Library" libraries from the Library Manager.
   `needsProvisioning()`; a false return leaves it set so the next
   boot's `begin()` gets another attempt.
 - `bool log(const std::vector<SensorNodeChannel> &channels, const std::vector<float> &values)`
-  -- posts `values`, zipped positionally against `channels`: `values[0]`
+  -- buffers `values`, zipped positionally against `channels`: `values[0]`
   is `channels[0]`'s reading, `values[1]` is `channels[1]`'s, and so on
   -- **not** matched up by id, so reordering `channels` without
   updating every `values` list built against it would silently misfile
@@ -154,16 +154,28 @@ Library" libraries from the Library Manager.
   and `decimalPlaces` (for rounding) -- `channels` is typically the
   same list passed to `provision()`. `values` can be shorter than
   `channels` to report only the first several (e.g.
-  `node.log(kChannels, {ch0, ch1})` to skip channels 2+ some call) --
-  `log()` fills any lower, unmentioned ids in between with a skipped
-  value itself, matching the log endpoint's position-addressed wire
-  format (no more hand-padding `NAN`s up to a gap like channel 15 --
-  see `examples/BME280Node`). A `NAN` value is left out of the request
-  entirely, which the log endpoint treats as "skip this channel"
-  rather than logging a zero. Returns whether the server confirmed the
-  data was logged. If the response also carries a `Command: ...` line, it's persisted for
-  `applyPendingCommand()`/`checkPendingCommand()` to act on -- `log()` itself never acts on
-  it.
+  `node.log(kChannels, {ch0, ch1})` to skip channels 2+ some call). A
+  `NAN` value is left out of the request entirely, which the log
+  endpoint treats as "skip this channel" rather than logging a zero.
+  Every call queues its reading in a fixed 64-entry RTC-memory ring
+  buffer first, unconditionally -- so a call never loses data even if
+  this wake doesn't also flush, or the flush fails. Only every
+  `config().reportEveryCycles`-th call actually POSTs anything,
+  batching everything queued since the last confirmed flush into one
+  request (`data[]`/`t[]` pairs -- see
+  [larsi.org/sensors/sensor-node.php](https://larsi.org/sensors/sensor-node.php)'s
+  Batched Reports section); `reportEveryCycles == 1` (the default)
+  flushes every call, identical to this method's behavior before
+  buffering existed. A queued-but-not-this-wake call returns `true`
+  (queued, nothing was supposed to send yet); a flush-wake call returns
+  `true` only once the server confirms the whole batch was logged -- a
+  `false` return leaves everything queued for the next flush attempt to
+  retry, combined with whatever accumulates in the meantime. The ring
+  only ever holds the most recent 64 unflushed readings; a longer
+  outage silently evicts the oldest rather than growing or erroring.
+  If a flush's response also carries a `Command: ...` line, it's
+  persisted for `applyPendingCommand()`/`checkPendingCommand()` to act
+  on -- `log()` itself never acts on it.
 - `void applyPendingCommand()` -- acts on a command `log()` persisted on this or an
   earlier call, if it's one this method owns. `"scan_i2c"` runs immediately, right here
   (sweeps every I2C address on whatever `Wire` is already using and prints the result to
@@ -181,9 +193,9 @@ Library" libraries from the Library Manager.
   loaded settings (`ssids`/`passwords` arrays, `deviceName`,
   `deviceId`, `writeKey`, `logIntervalMinutes`, `reportEveryCycles`). Sketches read
   `logIntervalMinutes` themselves to compute their own `loop()` delay
-  -- this library doesn't call `log()` on a timer itself. `reportEveryCycles` isn't read by
-  this library at all yet (no buffering sketch exists here); it's only sent along to
-  `provision()` so the server can size its own alerting tolerance for whenever one does.
+  -- this library doesn't call `log()` on a timer itself. `reportEveryCycles` drives
+  `log()`'s own flush cadence (see above) and is also sent along to `provision()` so the
+  server can size its own alerting tolerance to match.
 
 ### `SensorNodeBattery`
 

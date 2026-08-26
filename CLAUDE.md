@@ -12,10 +12,9 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   added first, NVS keys `ssid0`/`password0`/`ssid1`/...) plus
   `deviceName`/`deviceId`/`writeKey`/`logIntervalMinutes`/`reportEveryCycles`, all
   persisted via `Preferences` (NVS). `reportEveryCycles` (1-12, default 1, added
-  2026-08-25) is unread by this library today -- it only rides along on `provision()`'s
-  POST body so the server can size `zeus_minutes` correctly once a future buffering sketch
-  actually sets it above 1; nothing here batches `log()` calls yet. Server host isn't part
-  of the
+  2026-08-25) drives `SensorNode::log()`'s own flush cadence (added 2026-08-26, see the RTC
+  ring buffer section below) and also rides along on `provision()`'s POST body so the
+  server can size `zeus_minutes` to match. Server host isn't part of the
   config; it's a hardcoded constant in `SensorNode.cpp` (`kServer`)
   since one node only ever reports to larsi.org -- the "different X
   per node" axis here is sensors wired to a sketch, not backend
@@ -66,11 +65,16 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `decimalPlaces` (for rounding) straight from the matching
   `SensorNodeChannel` instead of the caller repeating either at the
   call site. Internally `log()` builds its own `float[16]`/
-  `decimalPlaces[16]` (NaN-filled, id-indexed) from the zip, then
-  serializes id `0` through the highest id actually used -- that's
+  `decimalPlaces[16]` (NaN-filled, id-indexed) from the zip before
+  buffering it (see the RTC ring buffer paragraph below) -- that's
   what lets a sketch skip hand-padding `NAN`s up to a gap like channel
   15 (`examples/BME280Node`: `node.log(kChannels, {ch0, ch1, ch2, ch3,
-  ch15})` -- no channels 4-14 to write out by hand). `values` can also
+  ch15})` -- no channels 4-14 to write out by hand). A flush now always
+  serializes all 16 ids per queued entry (added 2026-08-26, see below),
+  not just up to the highest id used that call -- the log endpoint's
+  per-entry parsing already treats a trailing empty field the same as
+  a missing one, so this is wire-compatible, just a few bytes larger.
+  `values` can also
   be shorter than `channels`, to report only the first several without
   slicing `channels` itself. The zip being positional (not id-keyed)
   is a real trade -- reordering `channels` without updating every
@@ -187,6 +191,41 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   predates it) no longer self-clears -- it sits in `pending_command` until someone notices
   and clears it by hand. Acceptable since this mailbox is a manually-triggered testing aid,
   not high-volume traffic.
+
+  **RTC ring buffer (added 2026-08-26)** -- `log()`'s actual buffering implementation,
+  the piece `reportEveryCycles` existed for since 2026-08-25 but nothing read yet. A
+  fixed-size ring (`RTCRingSlot slots[64]` -- `{uint32_t epoch; float values[16];}`, sized
+  to the worst case regardless of what a given sketch actually reports) lives in an
+  anonymous-namespace `RTC_DATA_ATTR` struct in `SensorNode.cpp`, alongside `head`/`tail`
+  (ever-increasing `uint32_t` counters, not pre-masked -- a slot's real index is
+  `counter & 63`) and a `magic` canary. `RTC_DATA_ATTR` survives deep sleep and
+  `ESP.restart()`, which is what makes this the piece that lets a later deep-sleep sketch
+  be a drop-in rather than a rework -- but it does *not* survive a power-on/EN reset,
+  which is exactly what flashing new firmware over USB does. `ensureRingInitialized()`
+  is the guard: if `magic` doesn't match the expected constant, `head`/`tail` reset to 0
+  before anything reads them, so a cold boot never mistakes undefined RTC memory content
+  for real ring state -- the flip side is that a physical reflash silently drops whatever
+  was still queued, an accepted trade-off rather than something to engineer around.
+  Every `log()` call pushes the current reading at `slots[head & 63]` and increments
+  `head` unconditionally, *before* deciding whether to attempt a network flush -- so a
+  reading is durably queued even on a wake that doesn't flush, or where the flush fails.
+  If the push leaves the ring over capacity (`head - tail > 64`), the same write path also
+  increments `tail` -- there's deliberately no separate consumer-side bookkeeping to keep
+  `tail` valid; the one place that produces an overflow is the one place that corrects it.
+  Flush cadence reuses `head` itself as the wake counter (`head % reportEveryCycles == 0`)
+  instead of a second counter, since exactly one push happens per call; `reportEveryCycles
+  == 1` (the default, and every device's setting until re-provisioned otherwise) flushes
+  every single call, identical to `log()`'s pre-buffering behavior. A flush walks every
+  slot from `tail` to `head`, building one request with repeated `data[]=`/`t[]=` pairs
+  (`t[]` = seconds before `now`, matching the batched wire form `sensors/log.php`/
+  `sensors/sensor-node.php` already document and accept) -- `tail` only advances to `head`
+  once the response confirms `"Data logged"`; a failed or skipped flush leaves `tail`
+  alone, so the next flush attempt naturally resends the whole backlog combined with
+  whatever's accumulated since, with no separate retry path. A `log()` call that pushes
+  but doesn't attempt a flush that wake now returns `true` (queued, not sent) rather than
+  the pre-buffering "server confirmed" meaning -- checked that no example sketch reads
+  `log()`'s return value before making that change (they all discard it: `node.log(...)`
+  as a bare statement in every `loop()`).
   `checkPortalButton()` only runs once, at the top of `setup()` --
   holding the pin while the device is already looping does nothing;
   it has to be held through an actual reset (button press or power
