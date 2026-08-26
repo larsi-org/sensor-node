@@ -226,6 +226,22 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   the pre-buffering "server confirmed" meaning -- checked that no example sketch reads
   `log()`'s return value before making that change (they all discard it: `node.log(...)`
   as a bare statement in every `loop()`).
+
+  **Sleep -- not yet implemented (open design question as of 2026-08-26).** The ring
+  buffer above exists specifically to make this a drop-in later, but "add sleep" isn't
+  one swap-in -- there's a real choice of *how much* to sleep, not yet resolved:
+  (1) WiFi modem-sleep only (`WiFi.setSleep(true)`) -- radio naps between beacons, CPU
+  keeps running, no reboot, smallest win since the CPU's own idle draw still dominates;
+  (2) light sleep (`esp_light_sleep_start()`) -- CPU halts between wakes, RAM retained,
+  no reboot, `loop()` just resumes where it left off, WiFi association can often survive
+  it; (3) deep sleep -- everything but the RTC domain powers off, lowest power by far, but
+  the chip *reboots* on every wake (no persistent `loop()` -- every cycle is a fresh pass
+  through `setup()`, which is exactly why the ring buffer lives in `RTC_DATA_ATTR` and not
+  a plain global) and pays full Wi-Fi reassociation (scan/connect/DHCP/NTP) every wake,
+  amortizing fine at 5+ minute intervals but wasteful at 1-minute ones. Deep sleep is the
+  most likely real target given this is battery-powered (the whole reason
+  `SensorNodeBattery`'s SOC channel exists) and light/modem sleep leave the CPU's own draw
+  on the table, but nothing is decided -- don't assume deep sleep without checking back.
   `checkPortalButton()` only runs once, at the top of `setup()` --
   holding the pin while the device is already looping does nothing;
   it has to be held through an actual reset (button press or power

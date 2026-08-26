@@ -214,6 +214,11 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
 
 ## Notes
 
+- This library doesn't sleep between `loop()` cycles yet -- `log()`'s RTC ring buffer
+  (above) exists specifically to make that a drop-in later, but no sketch calls any sleep
+  API today; `delay(node.config().logIntervalMinutes * 60UL * 1000)` is still what every
+  example uses. See `CLAUDE.md`'s "Sleep" note for the open modem-sleep/light-sleep/
+  deep-sleep tradeoff this hasn't settled on yet.
 - A sketch can implement its own pending commands on top of the same mailbox
   `applyPendingCommand()`/`checkPendingCommand()` use, via `pendingCommand()`/
   `setPendingCommand()`/`clearPendingCommand()` (`SensorNodeConfig.h`, plain functions, not
