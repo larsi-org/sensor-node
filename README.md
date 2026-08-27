@@ -10,7 +10,7 @@ yet, or none in range), it opens an access point with a captive setup
 portal: pick a network from a live scan, enter the password, and set a
 device name (required -- defaults to `"Weather <last 6 MAC hex
 digits>"` when nothing's saved yet, so a fresh device never ships
-with a blank name), device id (0-15), write key, log frequency
+with a blank name), device id (0-15), API key, log frequency
 (1, 2, 3, 5, 10, 15, 20, 30, or 60 minutes -- default 5), and report
 frequency (1-12 cycles -- default 1, meaning every cycle is reported
 immediately; higher values batch that many cycles into one flush, see
@@ -23,11 +23,11 @@ most-recently-added first -- a node that moves between a handful of
 locations (e.g. two homes) reconnects immediately without
 reprovisioning every time it moves back. `begin()` tries each in turn;
 only once none of them connect does the portal come up, pre-filled
-with the existing device name/id/write key (but not the
+with the existing device name/id/API key (but not the
 network password -- see Notes) so moving to a new location only means
 adding one new network.
 
-The device id is what makes a single write key usable for more than
+The device id is what makes a single API key usable for more than
 one physical node without their channel numbers colliding -- each
 device id gets its own block of 16 channels (see "Data Channel" in the
 [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
@@ -196,6 +196,16 @@ Library" libraries from the Library Manager.
   -- this library doesn't call `log()` on a timer itself. `reportEveryCycles` drives
   `log()`'s own flush cadence (see above) and is also sent along to `provision()` so the
   server can size its own alerting tolerance to match.
+- `String fetchConfig()` -- POSTs `key`/`device` (the same auth every other endpoint uses) to
+  the configured server's `config` endpoint and returns just the response body -- empty on any
+  failure (not connected, DNS, TLS connect, or a non-200 status). POST, not GET, so the write
+  key never ends up in the web server's access log, same reason `log()`/`provision()` are
+  POST-only. Unlike those two, this doesn't touch NVS or any persisted state -- a plain fetch
+  for a sketch that needs its own server-hosted config beyond `provision()`'s fixed fields, e.g.
+  `examples/DS18B20GridNode`'s per-deployment ROM-ID grid layout, served by
+  `larsi-org/html`'s `sensors/config.php` (which resolves `key` to a location prefix
+  server-side, the same way `sensors/log.php`/`provision.php` do). Call after `begin()` has
+  connected.
 
 ### `SensorNodeBattery`
 
@@ -247,13 +257,13 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
   single pinned cert's ~1.4KB, doesn't fit this device's flash budget
   (it was already at 92% before any bundle).
 - The setup portal's access point is open (no password) and only runs
-  while unconfigured/disconnected -- get a write key first (see the
+  while unconfigured/disconnected -- get an API key first (see the
   [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
 - The portal's Wi-Fi Password field is never pre-filled, even when
   re-opening the portal just to tweak the device name. Leave
   it blank to keep the saved password for an already-known network --
   it's only saved as typed for a genuinely new network.
-- The write key must match `larsi.org`'s own generator (`id.php`'s
+- The API key must match `larsi.org`'s own generator (`id.php`'s
   `generateID(16)`): 16 characters, starting with a letter, the rest
   letters/digits/`-`/`_`. `handleSave()` trims the submitted value
   first (accidental leading/trailing whitespace from copy-paste is

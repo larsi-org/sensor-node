@@ -122,23 +122,30 @@ String rawHttpRequest(WiFiClientSecure &client, const String &request, unsigned 
   return response;
 }
 
-// Shared by log() and provision(): connects to host (TLS SNI + HTTP Host header -- see
-// SensorNode::resolveServerIp() for where host/serverIp come from), writes body as a
-// form-encoded POST to path, and returns the raw response (empty string on connect failure).
-String postToServer(IPAddress serverIp, const String &host, const String &path, const String &body) {
-  WiFiClientSecure client;
+// Opens a TLS connection to host (TLS SNI + HTTP Host header -- see
+// SensorNode::resolveServerIp() for where host/serverIp come from), retrying once
+// (WiFiClientSecure occasionally fails its first connect attempt right after Wi-Fi association)
+// before giving up. Factored out of postToServer() so a future second caller doesn't have to
+// duplicate the retry dance.
+bool connectToServer(WiFiClientSecure &client, IPAddress serverIp, const String &host) {
   client.setCACertBundle(kServerCertBundle, kServerCertBundleLen);
   client.setHandshakeTimeout(15);  // seconds; default is 120
   // CA_cert/cert/private_key all null -- setCACertBundle() above is what actually verifies the
   // chain (see NetworkClientSecure's connect(): a null CA_cert falls through to the bundle
   // path rather than skipping verification, since useRootCABundle is a separate flag).
-  if (!client.connect(serverIp, 443, host.c_str(), nullptr, nullptr, nullptr) &&
-      !client.connect(serverIp, 443, host.c_str(), nullptr, nullptr, nullptr)) {
-    char err[128];
-    client.lastError(err, sizeof(err));
-    Serial.printf("[SensorNode] TLS connect failed: %s\n", err);
-    return String();
-  }
+  if (client.connect(serverIp, 443, host.c_str(), nullptr, nullptr, nullptr)) return true;
+  if (client.connect(serverIp, 443, host.c_str(), nullptr, nullptr, nullptr)) return true;
+  char err[128];
+  client.lastError(err, sizeof(err));
+  Serial.printf("[SensorNode] TLS connect failed: %s\n", err);
+  return false;
+}
+
+// Shared by log() and provision(): writes body as a form-encoded POST to path, and returns the
+// raw response (empty string on connect failure).
+String postToServer(IPAddress serverIp, const String &host, const String &path, const String &body) {
+  WiFiClientSecure client;
+  if (!connectToServer(client, serverIp, host)) return String();
 
   String request = "POST " + path + " HTTP/1.1\r\n";
   request += "Host: " + host + "\r\n";
@@ -150,6 +157,16 @@ String postToServer(IPAddress serverIp, const String &host, const String &path, 
   String response = rawHttpRequest(client, request, 5000);
   client.stop();
   return response;
+}
+
+// Backs SensorNode::fetchConfig(): strips a raw postToServer() response down to just its body,
+// or an empty string if the status line isn't 200 -- unlike log()/provision(), which just
+// substring-search the full raw response and don't care about stray header bytes mixed in,
+// fetchConfig()'s caller needs exactly the server-hosted content with nothing else attached.
+String extractBody(const String &response) {
+  if (response.indexOf(" 200 ") < 0) return String();
+  int bodyStart = response.indexOf("\r\n\r\n");
+  return bodyStart >= 0 ? response.substring(bodyStart + 4) : String();
 }
 
 // A single NTP query over WiFiUDP, setting the system clock on a valid
@@ -414,4 +431,12 @@ bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
   bool confirmed = response.indexOf("Provisioned") >= 0;
   if (confirmed) clearProvisionPending();
   return confirmed;
+}
+
+String SensorNode::fetchConfig() {
+  if (WiFi.status() != WL_CONNECTED) return String();
+  if (!resolveServerIp()) return String();
+  String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId);
+  String response = postToServer(serverIp_, serverHost_, serverBasePath_ + "config", body);
+  return extractBody(response);
 }

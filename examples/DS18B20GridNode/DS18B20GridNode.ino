@@ -1,33 +1,46 @@
-// TheCoop temperature grid node: revives the 2012-era 3-node "Temperature Grid A/B/C" setup
-// (thecoop device_id 4/5/6 in the sensors DB, 15 DS18B20 channels each -- 3 nodes x 3 columns x
-// 5 vertical slices = the 45-sensor grid) as ONE board instead of three, using 3 of the
-// DS2482-800's 8 channels as the 3 columns (5 probes/column on its own physical 1-Wire line) and
-// this board's onboard MAX17048 for channel 15 -- exactly the slot the old 3 boards never used.
+// Generic DS18B20 grid node: up to 3 columns (A/B/C), each its own physical 1-Wire line on one
+// of the DS2482-800's 8 channels, up to 7 probes (vertical slices) per column -- channel budget
+// is 15 total across all columns (server channel ids 0-14) plus channel 15 for the onboard
+// MAX17048 battery, so a single column can use all 7 while two others sit unused, or all three
+// can be populated as long as they don't collectively exceed 15 (e.g. 5/5/5, or 7/7/1, or
+// 7/6/2 -- any split works, not just an even one).
 //
 // Requires the "Adafruit DS248x" library (Arduino Library Manager) for the DS2482-800/DS2484
 // I2C-to-1-Wire bridge. Deliberately NOT DallasTemperature/OneWire -- Adafruit_DS248x's
-// OneWireReset/OneWireWriteByte/OneWireReadByte/OneWireSearch are the only primitives it
-// provides, so the DS18B20 command sequence (skip-ROM broadcast Convert T, match-ROM Read
-// Scratchpad, CRC8) is hand-rolled below, same shape as the library's own DS2484_DS18B20
-// example. This also means the ESP32-C6 OneWire compile problem (see OneWireNode.ino's header)
-// never applies here -- there's no OneWire/DallasTemperature dependency to hit it.
+// OneWireReset/OneWireWriteByte/OneWireReadByte are the only primitives it provides, so the
+// DS18B20 command sequence (skip-ROM broadcast Convert T, match-ROM Read Scratchpad, CRC8) is
+// hand-rolled below, same shape as the library's own DS2484_DS18B20 example. This also means
+// the ESP32-C6 OneWire compile problem (see OneWireNode.ino's header) never applies here --
+// there's no OneWire/DallasTemperature dependency to hit it.
 //
 // See BasicNode.ino for the setup-portal walkthrough (first boot, the SensorNode-Setup-XXXXXX
 // access point, and the reset-button hold behavior) -- identical here.
 //
-// ROM ADDRESSING (2026-08-26): whether thecoop's original 3-board grid is even still physically
-// intact is unknown, and its ROM codes were never captured anywhere -- so this doesn't try to
-// revive that specific hardware. Column A instead reuses OneWireNode.ino's 5 known-good probes
-// (the old batcave_temperature5.pde strand) as a bench-testing set with IDs already on hand --
-// see kKnownProbesA below, verified present at boot the same way OneWireNode.ino does (a probe
-// not found there reads NAN every cycle instead of a stale/garbage value). Columns B and C have
-// no known IDs at all yet, so they're still searched fresh at boot and assigned grid position by
-// SEARCH ORDER, which is NOT physical position along the bus (it's driven by each ROM's address
-// bits) -- fine for now since "up to 15 sensors" is a ceiling this node supports, not a
-// requirement it's actually wired for. If B/C ever get real probes whose vertical position
-// matters, read the "column X probe Y: ROM ..." lines this prints at boot, confirm/relabel which
-// ROM is actually at which slice by hand (e.g. warm one probe at a time and watch which reading
-// jumps), and hardcode a kKnownProbes table for them the same way column A already has one.
+// GRID CONFIG (2026-08-27): which probes exist and where they sit in the grid comes from a
+// per-deployment text file fetched at boot via SensorNode::fetchConfig() -- a POST of this
+// device's key/device id to https://larsi.org/sensors/config (same auth as log()/provision()),
+// which the server resolves to this device's location.prefix and returns
+// sensors/config/<prefix>-<deviceId>.txt's raw content. That file isn't directly web-accessible
+// (Require-all-denied) -- config.php gates every read behind the API key, both so a stray
+// prefix/deviceId guess can't read another station's layout and for consistency with every other
+// sensor-node endpoint. This replaces hardcoding known ROM codes or discovering them via bus
+// search (both tried in earlier revisions of this sketch) -- the real per-deployment layout now
+// lives server-side as a small hand-authored file, editable without reflashing.
+//
+// File format: one line per column, in order (line 1 = column A, line 2 = B, line 3 = C -- a
+// file with only 1 or 2 lines just leaves the rest unconfigured), each a comma-separated list
+// of that column's probes' 64-bit ROM codes as 16 hex chars (no "0x", no separators within one
+// ID -- e.g. "284A5CD703000073"), top-to-bottom/first-to-last. A column can list 0-7 IDs
+// (kMaxProbesPerColumn); the columns don't all need the same count -- an asymmetric grid (e.g.
+// 7 on A, 3 on B, nothing on C) is exactly as valid as a uniform one, which is the whole reason
+// this is free-form CSV-per-line rather than a fixed "columns,rows" header. The only other
+// limit is the 15-channel budget shared across every column combined (see the top comment) --
+// parsing stops accepting new IDs once that's hit, wherever in the file that happens to be.
+// Channel ids are assigned consecutively in file order (column A's IDs first, then B's, then
+// C's) -- e.g. a 2-line file "a1,a2,a3\nb1,b2,b3" assigns channel 0=a1, 1=a2, 2=a3, 3=b1, 4=b2,
+// 5=b3 (channel 15 is always the battery, never part of this count). Blank lines and blank/
+// malformed individual IDs are skipped with a Serial warning rather than aborting the whole
+// parse -- a typo in one ID shouldn't cost every other probe in the file.
 
 #include <Adafruit_DS248x.h>
 #include <Adafruit_SH110X.h>
@@ -47,57 +60,27 @@ const uint32_t kFirmwareVersion = 1;
 // 0x18-0x1F), so there's no need to move off the default.
 Adafruit_DS248x bridge;
 
-// The 3 columns (A/B/C, matching the old 3 separate boards) each get their own DS2482-800
-// channel and their own physical 1-Wire line of up to 5 probes (vertical slices, top to
-// bottom). Channels 3-7 go unused -- see the library's CLAUDE.md note on this project's line
-// layout ruling out one-probe-per-channel.
-const uint8_t kNumColumns = 3;
-const uint8_t kProbesPerColumn = 5;
-const uint8_t kBridgeChannel[kNumColumns] = {0, 1, 2};
-const char *kColumnLetter[kNumColumns] = {"A", "B", "C"};
+// Up to 3 columns (A/B/C), each its own DS2482-800 channel and its own physical 1-Wire line.
+// Channels 3-7 go unused -- see the library's CLAUDE.md note on this project's line layout
+// ruling out one-probe-per-channel. kMaxProbesPerColumn/kMaxTotalProbes are ceilings the parser
+// enforces (see the file header comment); columnCount/probeCountPerColumn are this boot's
+// actual parsed shape, which can be smaller in every dimension.
+const uint8_t kMaxColumns = 3;
+const uint8_t kMaxProbesPerColumn = 7;
+const uint8_t kMaxTotalProbes = 15;  // channel ids 0-14; 15 is always the battery
+const uint8_t kBridgeChannel[kMaxColumns] = {0, 1, 2};
 
-// Column A's 5 probes -- same physical strand and ROM codes as OneWireNode.ino's kKnownProbes
-// (originally CCubes_DataLogger/batcave_temperature5.pde's temp01..temp05), reused here as a
-// bench-testing set with known-good IDs on hand. See the ROM ADDRESSING note above.
-const uint8_t kKnownProbesA[kProbesPerColumn][8] = {
-    {0x28, 0x4A, 0x5C, 0xD7, 0x03, 0x00, 0x00, 0x73},  // temp01
-    {0x28, 0xDB, 0x70, 0xD7, 0x03, 0x00, 0x00, 0x2C},  // temp02
-    {0x28, 0xCC, 0x7E, 0xD7, 0x03, 0x00, 0x00, 0x50},  // temp03
-    {0x28, 0x87, 0x86, 0xD7, 0x03, 0x00, 0x00, 0x45},  // temp04
-    {0x28, 0x5D, 0xAA, 0xD7, 0x03, 0x00, 0x00, 0x97},  // temp05
-};
+uint8_t columnCount = 0;
+uint8_t probeCountPerColumn[kMaxColumns] = {0, 0, 0};
+uint8_t romId[kMaxColumns][kMaxProbesPerColumn][8];
+bool probeFound[kMaxColumns][kMaxProbesPerColumn];
 
-// Column A copied from kKnownProbesA at boot (verified present, see setup()); columns B/C filled
-// by searchColumn() -- see the ROM ADDRESSING note above.
-uint8_t discoveredRom[kNumColumns][kProbesPerColumn][8];
-bool probeFound[kNumColumns][kProbesPerColumn];
-
-// Channel ids 0-14 (column-major: column*5 + vertical slice), matching the shape of the old
-// thecoop device_id 4/5/6 rows in the sensors DB (15 DS18B20 Temperature channels each) --
-// consolidated onto one device here instead of split across 3. Channel 15: onboard battery
-// state of charge (SensorNodeBattery::kSocChannel -- reserved sitewide). log() zips this
-// positionally against a values list built the same column-major way in loop(). Written out as
-// a flat literal table (not generated from kColumnLetter) since SensorNodeChannel::label is a
-// raw `const char *`, not a String -- a loop-built String's buffer wouldn't outlive the loop
-// iteration that created it.
-const std::vector<SensorNodeChannel> kChannels = {
-    {0, "DS18B20", "Temperature", "C", "A1", 1},
-    {1, "DS18B20", "Temperature", "C", "A2", 1},
-    {2, "DS18B20", "Temperature", "C", "A3", 1},
-    {3, "DS18B20", "Temperature", "C", "A4", 1},
-    {4, "DS18B20", "Temperature", "C", "A5", 1},
-    {5, "DS18B20", "Temperature", "C", "B1", 1},
-    {6, "DS18B20", "Temperature", "C", "B2", 1},
-    {7, "DS18B20", "Temperature", "C", "B3", 1},
-    {8, "DS18B20", "Temperature", "C", "B4", 1},
-    {9, "DS18B20", "Temperature", "C", "B5", 1},
-    {10, "DS18B20", "Temperature", "C", "C1", 1},
-    {11, "DS18B20", "Temperature", "C", "C2", 1},
-    {12, "DS18B20", "Temperature", "C", "C3", 1},
-    {13, "DS18B20", "Temperature", "C", "C4", 1},
-    {14, "DS18B20", "Temperature", "C", "C5", 1},
-    {SensorNodeBattery::kSocChannel, "MAX17048", "State of Charge", "%"},
-};
+// Built once in setup() from the parsed grid config -- SensorNodeChannel::label is left at its
+// default ("") rather than a generated "A1"/"B3"/etc: it's a raw `const char *`, and with a
+// runtime-variable channel count there's no way to give each one a string literal with static
+// storage duration the way the old fixed-shape kChannels table could. Nothing in this sketch
+// reads label anyway (the OLED grid below is purely positional, and provision() never sends it).
+std::vector<SensorNodeChannel> channels;
 
 // Optional Adafruit FeatherWing OLED (128x64, SH1107, I2C address 0x3C -- shares the Qwiic bus
 // with the bridge/MAX17048; independent of the bridge's 1-Wire channels). Detected at boot via
@@ -113,15 +96,15 @@ bool oledPresent = false;
 String oledTitle;  // deviceName, else a hardcoded fallback -- set in setup()
 
 // Row 0: title + battery icon (kTitleWidth/kBatteryIconWidth, same layout as BME280Node.ino).
-// Row 1: left blank on purpose -- a visual gap before the grid, spending one of the 8 rows this
-// screen has to spare on readability. Rows 2-6: one vertical slice per row, 3 columns per row
-// (row 7 unused). Each column is a 5-char right-justified numeric field plus a literal "C" unit
-// suffix (kValueNumericWidth + 1 = 6 chars), joined by single "|" dividers between columns (not
-// after the last one) -- e.g. " 28.3C|-10.5C|  0.3C", 3 x 6 + 2 = 20 characters, tight against
-// this display's 21-char width. All 3 columns and both dividers are always drawn regardless of
-// how many probes actually answered (a missing one just shows "--", no "C") -- deliberately, so
-// the display always shows the full 15-sensor layout this node supports, not just however many
-// are wired up today.
+// Rows 1-7: one vertical slice per row, columnCount columns per row (up to kMaxProbesPerColumn
+// rows total, filling the screen's remaining 7 rows exactly -- no blank spacer row anymore,
+// since 7 rows is the whole point of the budget above). Each column is a 5-char right-justified
+// numeric field plus a literal "C" unit suffix (kValueNumericWidth + 1 = 6 chars), joined by
+// single "|" dividers between columns (not after the last one) -- e.g.
+// " 28.3C|-10.5C|  0.3C" for a 3-column row, 3 x 6 + 2 = 20 characters. Only the columns/rows
+// this boot's parsed grid actually has are drawn (not always 3x7) -- a shorter column within a
+// taller grid still gets its empty cells rendered as "--" so the grid stays rectangular, but a
+// column that doesn't exist at all isn't given a phantom slot.
 const size_t kTitleWidth = 21;
 const int16_t kBatteryIconWidth = 14;
 const size_t kValueNumericWidth = 5;
@@ -170,29 +153,11 @@ uint8_t crc8(const uint8_t *data, uint8_t len) {
   return crc;
 }
 
-// Searches whichever channel is currently selected (caller's responsibility, matching
-// selectChannel() being a bridge-wide call rather than a per-search argument), filling up to
-// kProbesPerColumn ROM codes in search order. Any device beyond kProbesPerColumn is left
-// unsearched-for, same "silently ignore extras" convention as OneWireNode.ino's bus scan.
-void searchColumn(uint8_t col) {
-  bridge.OneWireSearchReset();
-  for (uint8_t row = 0; row < kProbesPerColumn; row++) {
-    probeFound[col][row] = bridge.OneWireSearch(discoveredRom[col][row]);
-    if (probeFound[col][row]) {
-      Serial.printf("Column %s probe %d: ROM ", kColumnLetter[col], row + 1);
-      for (uint8_t i = 0; i < 8; i++) Serial.printf("%02X", discoveredRom[col][row][i]);
-      Serial.println();
-    } else {
-      Serial.printf("Column %s probe %d: not found -- channel %d will read NAN.\n",
-                    kColumnLetter[col], row + 1, col * kProbesPerColumn + row);
-    }
-  }
-}
-
 // Match-ROM + Read Scratchpad against the channel currently selected (caller's responsibility)
-// -- assumes requestConvert() below already ran and its 750ms wait has elapsed. Returns NAN on
-// a bad CRC (e.g. a probe that dropped off mid-cycle) the same way OneWireNode.ino treats
-// DEVICE_DISCONNECTED_C -- skipped by log() rather than reported as a wildly wrong temperature.
+// -- assumes requestConvert() below already ran and its 750ms wait has elapsed (or, at boot,
+// that a prior conversion left a valid scratchpad -- see the presence check in setup()). Returns
+// NAN on a bad CRC (e.g. a probe that dropped off mid-cycle), skipped by log() rather than
+// reported as a wildly wrong temperature.
 float readTemperature(const uint8_t rom[8]) {
   bridge.OneWireReset();
   bridge.OneWireWriteByte(0x55);  // Match ROM
@@ -208,9 +173,9 @@ float readTemperature(const uint8_t rom[8]) {
 }
 
 // Skip-ROM broadcasts Convert T to every probe on the channel currently selected (caller's
-// responsibility) -- one request covers all 5 probes on that column's line, same as
+// responsibility) -- one request covers every probe on that column's line, same as
 // OneWireNode.ino's dsSensors.requestTemperatures(). Does NOT wait for the 750ms conversion
-// itself -- see loop(), which triggers all 3 columns back-to-back before waiting once, since
+// itself -- see loop(), which triggers every column back-to-back before waiting once, since
 // each column's DS18B20s convert on their own physical line independently of the I2C bridge
 // selection that triggered them.
 void requestConvert(uint8_t col) {
@@ -218,6 +183,80 @@ void requestConvert(uint8_t col) {
   bridge.OneWireReset();
   bridge.OneWireWriteByte(0xCC);  // Skip ROM
   bridge.OneWireWriteByte(0x44);  // Convert T
+}
+
+// One hex digit -> its 0-15 value, or -1 if not a hex digit -- used by parseRomId() below
+// instead of strtoul() per-nibble to avoid churning a temporary String per digit.
+int hexNibble(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+// Parses exactly 16 hex chars into 8 bytes -- false (rom left untouched) on the wrong length or
+// any non-hex character.
+bool parseRomId(const String &text, uint8_t rom[8]) {
+  if (text.length() != 16) return false;
+  for (uint8_t i = 0; i < 8; i++) {
+    int hi = hexNibble(text[i * 2]);
+    int lo = hexNibble(text[i * 2 + 1]);
+    if (hi < 0 || lo < 0) return false;
+    rom[i] = (uint8_t)((hi << 4) | lo);
+  }
+  return true;
+}
+
+// Parses the grid config file's text (see this file's header comment for the exact format) into
+// columnCount/probeCountPerColumn/romId. Returns false (leaving all three untouched) if it
+// yields zero usable columns, e.g. an empty fetch (see SensorNode::fetchConfig()'s "empty on any
+// failure" behavior) or a file that's nothing but blank lines. A single bad ID or an over-long
+// line doesn't abort the whole parse -- see the per-token handling below -- so a typo in one
+// entry doesn't cost every other probe in the file.
+bool parseGridConfig(const String &text) {
+  uint8_t newColumnCount = 0;
+  uint8_t newProbeCountPerColumn[kMaxColumns] = {0, 0, 0};
+  uint8_t newRomId[kMaxColumns][kMaxProbesPerColumn][8];
+  uint8_t totalProbes = 0;
+
+  int lineStart = 0;
+  while (lineStart < (int)text.length() && newColumnCount < kMaxColumns) {
+    int lineEnd = text.indexOf('\n', lineStart);
+    if (lineEnd < 0) lineEnd = text.length();
+    String line = text.substring(lineStart, lineEnd);
+    line.trim();
+    lineStart = lineEnd + 1;
+    if (line.length() == 0) continue;  // a blank line doesn't consume a column slot
+
+    uint8_t col = newColumnCount;
+    uint8_t count = 0;
+    int idStart = 0;
+    while (idStart < (int)line.length() && count < kMaxProbesPerColumn &&
+           totalProbes < kMaxTotalProbes) {
+      int idEnd = line.indexOf(',', idStart);
+      if (idEnd < 0) idEnd = line.length();
+      String idText = line.substring(idStart, idEnd);
+      idText.trim();
+      idStart = idEnd + 1;
+      if (idText.length() == 0) continue;  // tolerate a trailing/doubled comma
+      if (!parseRomId(idText, newRomId[col][count])) {
+        Serial.printf("[GridConfig] Bad ROM ID \"%s\" on column %d -- skipped\n", idText.c_str(),
+                      col);
+        continue;
+      }
+      count++;
+      totalProbes++;
+    }
+    newProbeCountPerColumn[col] = count;
+    newColumnCount++;
+  }
+
+  if (newColumnCount == 0) return false;
+
+  columnCount = newColumnCount;
+  memcpy(probeCountPerColumn, newProbeCountPerColumn, sizeof(probeCountPerColumn));
+  memcpy(romId, newRomId, sizeof(romId));
+  return true;
 }
 
 SensorNode node;
@@ -230,11 +269,35 @@ void setup() {
   node.checkFirmwareVersion(kFirmwareVersion);
   node.checkPendingCommand();
   node.checkPortalButton(kResetPin);
-  node.begin();
-  if (node.needsProvisioning()) node.provision(kChannels);
+  node.begin();  // connects Wi-Fi -- fetchConfig() below needs that, not the I2C bus
 
   const SensorNodeConfig &config = node.config();
   oledTitle = config.deviceName.length() > 0 ? config.deviceName : "DS18B20Grid " + macSuffix();
+
+  bool gridConfigured = parseGridConfig(node.fetchConfig());
+  if (!gridConfigured) {
+    Serial.println("[GridConfig] Failed to load/parse the grid config -- every channel will read NAN.");
+  }
+
+  uint8_t nextId = 0;
+  for (uint8_t col = 0; col < columnCount; col++) {
+    for (uint8_t row = 0; row < probeCountPerColumn[col]; row++) {
+      channels.push_back({nextId++, "DS18B20", "Temperature", "C"});
+    }
+  }
+  channels.push_back({SensorNodeBattery::kSocChannel, "MAX17048", "State of Charge", "%"});
+
+  // Provisioning needs the real channel list, which only exists once the grid config has been
+  // fetched -- skip it entirely on a boot where that failed rather than registering an empty/
+  // wrong shape; needsProvisioning() stays set, so a later boot (once the config is reachable)
+  // gets another attempt.
+  if (node.needsProvisioning()) {
+    if (gridConfigured) {
+      node.provision(channels);
+    } else {
+      Serial.println("[SensorNode] Skipping provision() -- no grid config yet.");
+    }
+  }
 
   Wire.begin();
   if (!bridge.begin(&Wire)) {
@@ -259,51 +322,51 @@ void setup() {
     oled.display();
   }
 
-  // Column A: verify each known probe actually answers (a stale scratchpad read still passes
-  // CRC if the chip is there, no fresh conversion needed) rather than assuming presence just
-  // because the ROM code is in kKnownProbesA -- same "not found -> NAN forever" treatment as
-  // OneWireNode.ino. Columns B/C: no known IDs yet, so discover fresh via search instead.
-  bridge.selectChannel(kBridgeChannel[0]);
-  for (uint8_t row = 0; row < kProbesPerColumn; row++) {
-    memcpy(discoveredRom[0][row], kKnownProbesA[row], 8);
-    probeFound[0][row] = !isnan(readTemperature(kKnownProbesA[row]));
-    Serial.printf("Column A probe %d: %s\n", row + 1,
-                  probeFound[0][row] ? "found" : "not found -- will read NAN");
-  }
-  for (uint8_t col = 1; col < kNumColumns; col++) {
+  // Verify each parsed ROM actually answers (a stale scratchpad read still passes CRC if the
+  // chip is there, no fresh conversion needed) rather than assuming presence just because the
+  // config file lists it -- a probe not found here reads NAN every cycle instead of a stale/
+  // garbage value, same treatment as every other example in this library.
+  for (uint8_t col = 0; col < columnCount; col++) {
     bridge.selectChannel(kBridgeChannel[col]);
-    searchColumn(col);
+    for (uint8_t row = 0; row < probeCountPerColumn[col]; row++) {
+      probeFound[col][row] = !isnan(readTemperature(romId[col][row]));
+      Serial.printf("Column %d probe %d: %s\n", col, row + 1,
+                    probeFound[col][row] ? "found" : "not found -- will read NAN");
+    }
   }
 
   delay(60UL * 1000);
 }
 
 void loop() {
-  // Trigger every column's broadcast Convert T back-to-back, then wait once -- the three
-  // columns' probes convert in parallel on their own physical lines during that single 750ms,
-  // rather than paying the conversion delay three times over.
-  for (uint8_t col = 0; col < kNumColumns; col++) requestConvert(col);
+  // Trigger every column's broadcast Convert T back-to-back, then wait once -- every column's
+  // probes convert in parallel on their own physical lines during that single 750ms, rather
+  // than paying the conversion delay once per column.
+  for (uint8_t col = 0; col < columnCount; col++) requestConvert(col);
   delay(750);
 
-  float reading[kNumColumns][kProbesPerColumn];
+  float reading[kMaxColumns][kMaxProbesPerColumn];
+  uint8_t maxRows = 0;
   std::vector<float> values;
-  values.reserve(kNumColumns * kProbesPerColumn + 1);
-  for (uint8_t col = 0; col < kNumColumns; col++) {
+  values.reserve(kMaxTotalProbes + 1);
+  for (uint8_t col = 0; col < columnCount; col++) {
     bridge.selectChannel(kBridgeChannel[col]);
-    for (uint8_t row = 0; row < kProbesPerColumn; row++) {
+    if (probeCountPerColumn[col] > maxRows) maxRows = probeCountPerColumn[col];
+    for (uint8_t row = 0; row < probeCountPerColumn[col]; row++) {
       float value = NAN;
-      if (probeFound[col][row]) value = readTemperature(discoveredRom[col][row]);
+      if (probeFound[col][row]) value = readTemperature(romId[col][row]);
       reading[col][row] = value;
       values.push_back(value);
     }
   }
   values.push_back(battery.readSOC());  // battery state of charge %
 
-  node.log(kChannels, values);
+  node.log(channels, values);
   node.applyPendingCommand();
 
-  // Title + battery icon, a blank row, then the 3x5 grid -- no per-reading label text (that's
-  // the "render differently" layout still to come), just the fixed-width numeric columns.
+  // Title + battery icon, then the grid -- no per-reading label text (that's the "render
+  // differently" layout still to come), just the fixed-width numeric columns, sized to
+  // whatever shape this boot's grid config actually parsed to (not always 3 wide/7 tall).
   if (oledPresent) {
     oled.clearDisplay();
     oled.setCursor(0, 0);
@@ -315,12 +378,13 @@ void loop() {
       drawBatteryIcon(kScreenWidth - kBatteryIconWidth, 0, barsLit);
     }
 
-    oled.setCursor(0, 16);  // row 1 (y=8) intentionally left blank -- see kTitleWidth's comment
-    for (uint8_t row = 0; row < kProbesPerColumn; row++) {
+    oled.setCursor(0, 8);  // no blank spacer row -- see the file header comment
+    for (uint8_t row = 0; row < maxRows; row++) {
       String line;
-      for (uint8_t col = 0; col < kNumColumns; col++) {
+      for (uint8_t col = 0; col < columnCount; col++) {
         if (col > 0) line += "|";
-        line += formatValue(reading[col][row]);
+        float value = row < probeCountPerColumn[col] ? reading[col][row] : NAN;
+        line += formatValue(value);
       }
       oled.println(line);
     }

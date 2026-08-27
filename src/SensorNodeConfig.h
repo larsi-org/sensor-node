@@ -13,7 +13,12 @@ struct SensorNodeConfig {
 
   String deviceName;
   uint8_t deviceId = 0;
-  String writeKey;  // location.WriteKey is varchar(16) -- always exactly 16 chars
+  // Displayed/documented as "API key" (renamed from "write key" 2026-08-27 -- the same
+  // credential now also gates the read-only sensors/config endpoint, not just writes) --
+  // field/NVS key intentionally still writeKey, see SensorNodePortal.cpp's note on why.
+  // Server-side: location's `key` column (renamed from write_key), varchar(16), always
+  // exactly 16 chars.
+  String writeKey;
 
   // How often the sketch should call log(), in minutes. Not enforced
   // by this library -- sketches read it themselves (config().

@@ -74,7 +74,7 @@ String htmlEscape(const String &in) {
 // right length but wrong shape (e.g. copy-pasted with a stray space,
 // or missing the leading-letter constraint) would otherwise only fail
 // once talking to the real server, with a generic "Key not found".
-bool isValidWriteKey(const String &key) {
+bool isValidApiKey(const String &key) {
   if (key.length() != 16) return false;
   if (!isalpha((unsigned char)key[0])) return false;
   for (size_t i = 0; i < key.length(); i++) {
@@ -194,7 +194,7 @@ String buildFormPage() {
   // fields -- this portal only runs because none of the known
   // networks worked (moved to a new location, most likely), so the
   // common case is just adding one new network without retyping the
-  // device name/id/write key.
+  // device name/id/API key.
   SensorNodeConfig existing;
   loadSensorNodeConfig(existing);
 
@@ -219,7 +219,7 @@ String buildFormPage() {
   page += "button{margin-top:1.5em;padding:.6em 1.2em;font-size:1em}</style></head><body>";
   page += "<h1>Sensor Node Setup</h1>";
   if (existing.ssids[0].length() > 0) {
-    page += "<p>Device name/ID/write key are pre-filled from the existing setup -- pick a new "
+    page += "<p>Device name/ID/API key are pre-filled from the existing setup -- pick a new "
             "Wi-Fi network below. Up to " +
             String(SensorNodeConfig::kMaxNetworks) +
             " networks are remembered (oldest is replaced), so moving back later should "
@@ -237,7 +237,7 @@ String buildFormPage() {
           htmlEscape(defaultDeviceName) + "\">";
   page += "<label>Device ID</label><select name=\"deviceId\">" +
           buildDeviceIdOptions(existing.deviceId) + "</select>";
-  page += "<label>Write Key (16 characters, starts with a letter)</label>";
+  page += "<label>API Key (16 characters, starts with a letter)</label>";
   // maxlength deliberately generous (not 16): a pasted key with
   // accidental leading/trailing whitespace is longer than 16 chars
   // until trimmed server-side (handleSave()) -- a strict maxlength="16"
@@ -245,6 +245,11 @@ String buildFormPage() {
   // characters instead of the whitespace. The pattern likewise allows
   // surrounding whitespace so a legitimate padded paste still passes
   // client-side validation instead of just failing to submit.
+  // name="writeKey" and SensorNodeConfig::writeKey (below) deliberately keep their old
+  // identifier despite the label/doc rename to "API key" (2026-08-27) -- renaming the NVS-
+  // persisted field/key would orphan whatever's already saved on a device that's been flashed
+  // and configured (see the library's "Durable lessons" note on renaming NVS keys), for a
+  // purely cosmetic win. Only user-visible text changed.
   page += "<input type=\"text\" name=\"writeKey\" maxlength=\"32\" required "
           "pattern=\"\\s*[A-Za-z][A-Za-z0-9_-]{15}\\s*\" value=\"" +
           htmlEscape(existing.writeKey) +
@@ -289,9 +294,9 @@ void handleSave() {
     server.send(400, "text/html", "<p>Device Name is required. <a href=\"/\">Back</a></p>");
     return;
   }
-  if (!isValidWriteKey(config.writeKey)) {
+  if (!isValidApiKey(config.writeKey)) {
     server.send(400, "text/html",
-                "<p>Write key must be 16 characters: a letter, then letters/digits/-/_ only. "
+                "<p>API key must be 16 characters: a letter, then letters/digits/-/_ only. "
                 "<a href=\"/\">Back</a></p>");
     return;
   }

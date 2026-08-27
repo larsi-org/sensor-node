@@ -143,6 +143,17 @@ class SensorNode {
   // set so the next boot's begin() gets another attempt.
   bool provision(const std::vector<SensorNodeChannel> &channels);
 
+  // POSTs key/device (the same auth every other endpoint uses) to the server's "config"
+  // endpoint and returns just the response body -- empty on any failure (not connected, DNS,
+  // TLS connect, or a non-200 status; there's no way to tell "empty file" from "request failed"
+  // from the return value alone, but no caller has needed that distinction yet). POST, not GET,
+  // so the API key never ends up in the web server's access log -- same reason log()/
+  // provision() are POST-only. Unlike those two, this doesn't touch NVS or any persisted state
+  // -- a plain fetch for a sketch that needs its own server-hosted config beyond what
+  // provision()'s fixed fields cover (e.g. a probe ROM-ID layout too free-form to fit as channel
+  // data). Call after begin() has connected.
+  String fetchConfig();
+
   const SensorNodeConfig &config() const { return config_; }
 
  private:

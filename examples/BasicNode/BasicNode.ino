@@ -5,7 +5,7 @@
 // On first boot (or whenever it can't connect), the node opens an
 // access point named "SensorNode-Setup-XXXXXX" -- join it and visit
 // http://192.168.4.1/ to pick a Wi-Fi network and enter this device's
-// name, id, write key, log frequency, and report frequency. It saves
+// name, id, API key, log frequency, and report frequency. It saves
 // and reboots automatically.
 //
 // Hold the button at boot to reach the portal on demand: a short hold

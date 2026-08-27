@@ -11,7 +11,11 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `passwords[]` (fixed-size arrays, `kMaxNetworks` = 3, most-recently-
   added first, NVS keys `ssid0`/`password0`/`ssid1`/...) plus
   `deviceName`/`deviceId`/`writeKey`/`logIntervalMinutes`/`reportEveryCycles`, all
-  persisted via `Preferences` (NVS). `reportEveryCycles` (1-12, default 1, added
+  persisted via `Preferences` (NVS). `writeKey` is displayed/documented everywhere as "API key"
+  (renamed 2026-08-27 -- the same credential now also gates the read-only `sensors/config`
+  endpoint, not just writes) but keeps its old field/NVS-key name deliberately, to avoid
+  orphaning what's already saved on a flashed device -- see `SensorNodePortal.cpp`'s note at the
+  API key form field. `reportEveryCycles` (1-12, default 1, added
   2026-08-25) drives `SensorNode::log()`'s own flush cadence (added 2026-08-26, see the RTC
   ring buffer section below) and also rides along on `provision()`'s POST body so the
   server can size `zeus_minutes` to match. `serverUrl` (added 2026-08-27, default
@@ -31,7 +35,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   portal (`WebServer` + `DNSServer` catch-all) used only while none of
   the known networks connect. `runSensorNodeSetupPortal()` blocks
   forever and restarts the device on successful submit. `buildFormPage()`
-  pre-fills device name/id/write key/log frequency/report frequency/server URL from the
+  pre-fills device name/id/API key/log frequency/report frequency/server URL from the
   existing config (loaded fresh each render), since the common reason
   the portal is running at all is that the node moved somewhere new --
   only the network fields need filling in (the password field is a
@@ -102,8 +106,9 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   (`"Dew Point Temperature"`), too long for the 128x64 OLED's
   default-font grid (21 columns x 8 rows at `setTextSize(1)`).
   `provision()` posts the device name/id/`reportEveryCycles` and a
-  `channel_id,sensor,property,unit` list (`SensorNodeChannel[]`, one entry per channel,
-  fixed per sketch) to `/sensors/provision` -- gated by `needsProvisioning()`
+  `channel_id,sensor,property,unit` list (`SensorNodeChannel[]`, one entry per channel --
+  fixed per sketch in every example except `DS18B20GridNode.ino`, which builds its list at
+  runtime from a fetched grid config, see below) to `/sensors/provision` -- gated by `needsProvisioning()`
   (`SensorNodeConfig`'s `provisionPending` NVS flag), not called
   unconditionally every boot: it can't run from inside the portal
   itself (the device isn't online as a station yet at that point), so
@@ -122,7 +127,19 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   leaves it set so the next boot's `begin()` gets another attempt --
   see `SensorNode::provision()`. Both `log()` and
   `provision()` share a `postToServer(host, path, body)` helper for the
-  connect/write/read boilerplate. `sanitizeHostname()` derives the
+  connect/write/read boilerplate; `connectToServer()` factors out just the TLS
+  connect-with-one-retry step, in case a future caller besides `postToServer()` needs it.
+  `SensorNode::fetchConfig()` (added 2026-08-27) POSTs `key`/`device` (the same auth every other
+  endpoint uses -- POST, not GET, so the API key never ends up in the access log) to the
+  server's `config` endpoint and returns just the response body via `extractBody()` (empty on
+  any failure, including a non-200 status -- unlike `log()`/`provision()`, which just
+  substring-search the full raw response, this caller needs clean content with no stray header
+  bytes). A plain fetch for a sketch that needs its own server-hosted config beyond
+  `provision()`'s fixed fields, e.g. `DS18B20GridNode.ino` fetching its per-deployment ROM-ID
+  grid layout from `sensors/config.php` (`larsi-org/html` repo) -- that endpoint resolves `key`
+  to a prefix server-side the same way `log.php`/`provision.php` do, so the device itself never
+  needs to know its own prefix. Doesn't touch NVS or any persisted state, unlike `log()`/
+  `provision()`. `sanitizeHostname()` derives the
   network hostname from `deviceName` (letters/digits/hyphens only,
   runs of anything else collapsed to one `-`) -- `deviceName` stays
   free-text and unsanitized everywhere else (`provision()`'s `name=`,
