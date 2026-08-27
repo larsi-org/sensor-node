@@ -15,8 +15,6 @@
 
 namespace {
 
-const char *kServer = "larsi.org";
-
 // Recognized pending command values -- see checkPendingCommand() (defers to next boot) and
 // applyPendingCommand() (runs immediately) for which is which.
 const char *kOpenPortalCommand = "open_portal";
@@ -124,26 +122,26 @@ String rawHttpRequest(WiFiClientSecure &client, const String &request, unsigned 
   return response;
 }
 
-// Shared by log() and provision(): connects, writes body as a
-// form-encoded POST to path, and returns the raw response (empty
-// string on connect failure).
-String postToServer(IPAddress serverIp, const char *path, const String &body) {
+// Shared by log() and provision(): connects to host (TLS SNI + HTTP Host header -- see
+// SensorNode::resolveServerIp() for where host/serverIp come from), writes body as a
+// form-encoded POST to path, and returns the raw response (empty string on connect failure).
+String postToServer(IPAddress serverIp, const String &host, const String &path, const String &body) {
   WiFiClientSecure client;
   client.setCACertBundle(kServerCertBundle, kServerCertBundleLen);
   client.setHandshakeTimeout(15);  // seconds; default is 120
   // CA_cert/cert/private_key all null -- setCACertBundle() above is what actually verifies the
   // chain (see NetworkClientSecure's connect(): a null CA_cert falls through to the bundle
   // path rather than skipping verification, since useRootCABundle is a separate flag).
-  if (!client.connect(serverIp, 443, kServer, nullptr, nullptr, nullptr) &&
-      !client.connect(serverIp, 443, kServer, nullptr, nullptr, nullptr)) {
+  if (!client.connect(serverIp, 443, host.c_str(), nullptr, nullptr, nullptr) &&
+      !client.connect(serverIp, 443, host.c_str(), nullptr, nullptr, nullptr)) {
     char err[128];
     client.lastError(err, sizeof(err));
     Serial.printf("[SensorNode] TLS connect failed: %s\n", err);
     return String();
   }
 
-  String request = "POST " + String(path) + " HTTP/1.1\r\n";
-  request += String("Host: ") + kServer + "\r\n";
+  String request = "POST " + path + " HTTP/1.1\r\n";
+  request += "Host: " + host + "\r\n";
   request += "Content-Type: application/x-www-form-urlencoded\r\n";
   request += "Content-Length: " + String(body.length()) + "\r\n";
   request += "Connection: close\r\n\r\n";
@@ -272,14 +270,19 @@ void SensorNode::checkPortalButton(uint8_t pin, unsigned long wipeHoldMs) {
 }
 
 bool SensorNode::resolveServerIp() {
+  if (!parseServerUrl(config_.serverUrl, serverHost_, serverBasePath_)) {
+    Serial.printf("[SensorNode] Invalid server URL \"%s\"\n", config_.serverUrl.c_str());
+    return false;
+  }
+
   if (serverIp_ != IPAddress()) return true;
-  Serial.printf("[SensorNode] Resolving %s...\n", kServer);
-  if (!WiFi.hostByName(kServer, serverIp_)) {
-    Serial.printf("[SensorNode] Could not resolve %s\n", kServer);
+  Serial.printf("[SensorNode] Resolving %s...\n", serverHost_.c_str());
+  if (!WiFi.hostByName(serverHost_.c_str(), serverIp_)) {
+    Serial.printf("[SensorNode] Could not resolve %s\n", serverHost_.c_str());
     serverIp_ = IPAddress();
     return false;
   }
-  Serial.printf("[SensorNode] Resolved %s -> %s\n", kServer, serverIp_.toString().c_str());
+  Serial.printf("[SensorNode] Resolved %s -> %s\n", serverHost_.c_str(), serverIp_.toString().c_str());
   return true;
 }
 
@@ -343,7 +346,7 @@ bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::
     body += "&data[]=" + data + "&t[]=" + String(offset);
   }
 
-  String response = postToServer(serverIp_, "/sensors/log", body);
+  String response = postToServer(serverIp_, serverHost_, serverBasePath_ + "log", body);
 
   Serial.printf("[SensorNode] POST /sensors/log (device=%d, body=%s):\n%s\n", config_.deviceId, body.c_str(), response.c_str());
 
@@ -404,7 +407,7 @@ bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
   String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) +
                 "&name=" + config_.deviceName + "&logInterval=" + String(config_.logIntervalMinutes) +
                 "&reportEvery=" + String(config_.reportEveryCycles) + "&channels=" + channelList;
-  String response = postToServer(serverIp_, "/sensors/provision", body);
+  String response = postToServer(serverIp_, serverHost_, serverBasePath_ + "provision", body);
 
   Serial.printf("[SensorNode] POST /sensors/provision:\n%s\n", response.c_str());
 

@@ -146,10 +146,15 @@ class SensorNode {
   const SensorNodeConfig &config() const { return config_; }
 
  private:
-  // Resolves and caches the server's IP; re-resolves on demand only if
-  // never successful yet (e.g. DNS wasn't up at boot).
+  // Parses config_.serverUrl into serverHost_/serverBasePath_, then resolves and caches
+  // serverHost_'s IP; re-resolves on demand only if never successful yet (e.g. DNS wasn't up
+  // at boot). The parse itself is cheap and re-done every call (config_.serverUrl never
+  // changes at runtime -- only a portal save + reboot can change it -- so this is just to keep
+  // the two derived fields next to the resolution that depends on them).
   bool resolveServerIp();
 
   SensorNodeConfig config_;
   IPAddress serverIp_;
+  String serverHost_;
+  String serverBasePath_ = "/";  // e.g. "/sensors/" -- log()/provision() append "log"/"provision"
 };

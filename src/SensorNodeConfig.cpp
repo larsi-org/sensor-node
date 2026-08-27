@@ -18,6 +18,7 @@ bool loadSensorNodeConfig(SensorNodeConfig &config) {
   config.writeKey = prefs.getString("writeKey", "");
   config.logIntervalMinutes = prefs.getUChar("logInterval", 5);
   config.reportEveryCycles = prefs.getUChar("reportEvery", 1);
+  config.serverUrl = prefs.getString("serverUrl", "https://larsi.org/sensors/");
   prefs.end();
   return config.isComplete();
 }
@@ -34,6 +35,7 @@ void saveSensorNodeConfig(const SensorNodeConfig &config) {
   prefs.putString("writeKey", config.writeKey);
   prefs.putUChar("logInterval", config.logIntervalMinutes);
   prefs.putUChar("reportEvery", config.reportEveryCycles);
+  prefs.putString("serverUrl", config.serverUrl);
   // Purges the retired deviceLocation key on any device that still has one saved from before
   // it was merged back into deviceName -- a no-op (remove() on an absent key just returns
   // false) once a device has already saved since this change.

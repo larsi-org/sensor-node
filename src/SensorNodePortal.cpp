@@ -23,6 +23,23 @@ String macSuffix() {
   return mac.substring(mac.length() - 6);
 }
 
+bool parseServerUrl(const String &url, String &host, String &basePath) {
+  String rest = url;
+  rest.trim();
+  int schemeEnd = rest.indexOf("://");
+  if (schemeEnd >= 0) rest = rest.substring(schemeEnd + 3);
+
+  int pathStart = rest.indexOf('/');
+  String h = pathStart >= 0 ? rest.substring(0, pathStart) : rest;
+  String p = pathStart >= 0 ? rest.substring(pathStart) : "/";
+  if (h.length() == 0) return false;
+  if (!p.endsWith("/")) p += "/";
+
+  host = h;
+  basePath = p;
+  return true;
+}
+
 namespace {
 
 const byte kDnsPort = 53;
@@ -236,6 +253,8 @@ String buildFormPage() {
           buildLogIntervalOptions(existing.logIntervalMinutes) + "</select>";
   page += "<label>Report Every</label><select name=\"reportEvery\">" +
           buildReportEveryOptions(existing.reportEveryCycles) + "</select>";
+  page += "<label>Server URL</label><input type=\"url\" name=\"serverUrl\" maxlength=\"96\" required value=\"" +
+          htmlEscape(existing.serverUrl) + "\">";
   page += "<button type=\"submit\">Save &amp; Reboot</button>";
   page += "</form></body></html>";
   return page;
@@ -259,6 +278,8 @@ void handleSave() {
   uint8_t logInterval = (uint8_t)server.arg("logInterval").toInt();
   config.logIntervalMinutes = isValidLogInterval(logInterval) ? logInterval : 5;
   config.reportEveryCycles = (uint8_t)constrain(server.arg("reportEvery").toInt(), 1, 12);
+  config.serverUrl = server.arg("serverUrl");
+  config.serverUrl.trim();  // strip accidental leading/trailing whitespace from copy-paste
 
   if (newSsid.length() == 0) {
     server.send(400, "text/html", "<p>Wi-Fi network is required. <a href=\"/\">Back</a></p>");
@@ -272,6 +293,11 @@ void handleSave() {
     server.send(400, "text/html",
                 "<p>Write key must be 16 characters: a letter, then letters/digits/-/_ only. "
                 "<a href=\"/\">Back</a></p>");
+    return;
+  }
+  String unusedHost, unusedBasePath;  // just validating shape here -- SensorNode does the real parse
+  if (!parseServerUrl(config.serverUrl, unusedHost, unusedBasePath)) {
+    server.send(400, "text/html", "<p>Server URL must include a hostname. <a href=\"/\">Back</a></p>");
     return;
   }
 

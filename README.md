@@ -229,8 +229,12 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
   check `pendingCommand()` for your own command name (typically right after
   `applyPendingCommand()` in `loop()`, or at the top of `setup()` for one that needs to run
   before `begin()` connects) and call `clearPendingCommand()` once you've handled it.
-- The server is hardcoded to `larsi.org` -- this library is for nodes
-  reporting there, not a generic multi-backend client.
+- The server is a portal-configured "Server URL" field (default
+  `https://larsi.org/sensors/`, `SensorNodeConfig::serverUrl`), not a
+  hardcoded constant -- `log()`/`provision()` build their requests
+  against it directly. The scheme is accepted but ignored: this
+  library always connects over TLS on port 443 regardless of what's
+  typed, and there's no port-override support.
 - TLS is verified against a curated 5-root CA bundle
   (`src/SensorNodeCertBundle.h`), not a single pinned cert -- covers
   larsi.org's current provider (GoDaddy) plus the ones it would

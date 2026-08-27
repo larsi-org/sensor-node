@@ -28,6 +28,14 @@ struct SensorNodeConfig {
   // unbuffered behavior.
   uint8_t reportEveryCycles = 1;
 
+  // Base URL API calls are built against, e.g. "https://larsi.org/sensors/" -- log()/
+  // provision() append "log"/"provision" onto it directly (see parseServerUrl(),
+  // SensorNodePortal.h). Defaults to larsi.org (loadSensorNodeConfig()'s getString() default),
+  // not hardcoded, so a node can be pointed at a different server without a firmware change.
+  // The scheme is accepted but ignored -- SensorNode always connects over TLS on port 443
+  // regardless of what's typed here.
+  String serverUrl;
+
   bool isComplete() const { return ssids[0].length() > 0 && writeKey.length() == 16; }
 };
 

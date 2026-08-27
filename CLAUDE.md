@@ -14,11 +14,12 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   persisted via `Preferences` (NVS). `reportEveryCycles` (1-12, default 1, added
   2026-08-25) drives `SensorNode::log()`'s own flush cadence (added 2026-08-26, see the RTC
   ring buffer section below) and also rides along on `provision()`'s POST body so the
-  server can size `zeus_minutes` to match. Server host isn't part of the
-  config; it's a hardcoded constant in `SensorNode.cpp` (`kServer`)
-  since one node only ever reports to larsi.org -- the "different X
-  per node" axis here is sensors wired to a sketch, not backend
-  servers. A `deviceLocation` field briefly existed here (2026-08-23 to
+  server can size `zeus_minutes` to match. `serverUrl` (added 2026-08-27, default
+  `"https://larsi.org/sensors/"` via `loadSensorNodeConfig()`'s `getString()` default) is the
+  base URL `log()`/`provision()` build their requests against -- `parseServerUrl()`
+  (`SensorNodePortal.h`) splits it into a bare hostname and a base path guaranteed to end in
+  `/`, discarding whatever scheme was typed (this library always connects over TLS on port 443
+  regardless -- no port-override support). A `deviceLocation` field briefly existed here (2026-08-23 to
   2026-08-24) alongside `device.device_location` server-side -- merged
   back into `deviceName` and dropped: most stations only ever have one
   device, and where they don't (`thecoop`), what actually distinguishes
@@ -30,7 +31,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   portal (`WebServer` + `DNSServer` catch-all) used only while none of
   the known networks connect. `runSensorNodeSetupPortal()` blocks
   forever and restarts the device on successful submit. `buildFormPage()`
-  pre-fills device name/id/write key/log frequency/report frequency from the
+  pre-fills device name/id/write key/log frequency/report frequency/server URL from the
   existing config (loaded fresh each render), since the common reason
   the portal is running at all is that the node moved somewhere new --
   only the network fields need filling in (the password field is a
@@ -120,7 +121,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   the pending flag; anything else (no connectivity, server error)
   leaves it set so the next boot's `begin()` gets another attempt --
   see `SensorNode::provision()`. Both `log()` and
-  `provision()` share a `postToServer(path, body)` helper for the
+  `provision()` share a `postToServer(host, path, body)` helper for the
   connect/write/read boilerplate. `sanitizeHostname()` derives the
   network hostname from `deviceName` (letters/digits/hyphens only,
   runs of anything else collapsed to one `-`) -- `deviceName` stays
@@ -281,15 +282,14 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 
 ## Networking
 
-- **DNS** (`SensorNode::resolveServerIp()`) resolves `kServer` once via
-  `WiFi.hostByName()` and caches it in `serverIp_`, re-resolving only
-  on failure -- deliberately not every `log()` call, since
-  `NetworkManager::hostByName()` doesn't take the TCPIP core lock lwIP
-  requires (`arduino-esp32` issue #10526, still unpatched as of core
-  3.3.11) and can hang or crash under load. If DNS starts
-  failing/crashing again, fall back to hardcoding `kServerIp` and
-  passing `kServer` to `connect()` only for TLS SNI/the HTTP Host
-  header.
+- **DNS** (`SensorNode::resolveServerIp()`) parses `config_.serverUrl` into `serverHost_`/
+  `serverBasePath_` (see `parseServerUrl()`, `SensorNodePortal.h`) every call -- cheap, pure
+  string work, no I/O -- but only actually resolves `serverHost_` via `WiFi.hostByName()` and
+  caches the result in `serverIp_` once, re-resolving only on failure -- deliberately not every
+  `log()` call, since `NetworkManager::hostByName()` doesn't take the TCPIP core lock lwIP
+  requires (`arduino-esp32` issue #10526, still unpatched as of core 3.3.11) and can hang or
+  crash under load. If DNS starts failing/crashing again, fall back to hardcoding the resolved
+  IP and passing `serverHost_` to `connect()` only for TLS SNI/the HTTP Host header.
 - **`HTTPClient` is deliberately not used.** `log()` writes a raw
   HTTP/1.1 request straight to the socket immediately after
   `connect()` instead (`rawHttpRequest()`) -- on this hardware, the
