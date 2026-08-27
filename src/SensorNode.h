@@ -104,7 +104,7 @@ class SensorNode {
   // unconditionally -- so a call never loses data, even if this wake doesn't also flush (below)
   // or the flush fails. Only every config().reportEveryCycles-th call actually attempts to send
   // anything, batching everything queued since the last confirmed flush into one request (see
-  // https://larsi.org/sensors/sensor-node.php's Batched Reports). reportEveryCycles == 1 (the
+  // https://larsi.org/sensors/api.php#batched-reports). reportEveryCycles == 1 (the
   // default) flushes every call, same as before buffering existed. A queued-but-not-this-wake
   // call returns true (queued, nothing was supposed to send yet); a flush wake returns true only
   // once the server confirms the batch was logged -- a false return leaves everything queued for
@@ -112,7 +112,7 @@ class SensorNode {
   // only the most recent 64 unflushed readings -- a longer outage silently evicts the oldest.
   //
   // A successful flush's response may also carry a one-shot test command (a "Command: ..." line
-  // -- see https://larsi.org/sensors/sensor-node.php), which gets persisted for
+  // -- see https://larsi.org/sensors/api.php), which gets persisted for
   // applyPendingCommand()/checkPendingCommand() to act on -- log() itself never acts on it.
   bool log(const std::vector<SensorNodeChannel> &channels, const std::vector<float> &values);
 

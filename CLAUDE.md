@@ -60,8 +60,8 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `begin()` tries each known network in turn, falls back to the portal
   if none connect, then resolves the server and syncs the clock via
   NTP. `log()` sends `device` and `data` as separate form fields per the
-  wire protocol (see `https://larsi.org/sensors/sensor-node.php` in the
-  main site repo) and writes it as a raw HTTP/1.1 request directly to a
+  wire protocol (see `https://larsi.org/sensors/api.php` in the
+  main site repo -- split out of `sensor-node.php`, now onboarding-only, 2026-08-27) and writes it as a raw HTTP/1.1 request directly to a
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
   `log()` takes `(SensorNodeChannel[], float[])`, not just a plain
   `float[]`. `values` is zipped *positionally* against `channels`
@@ -161,7 +161,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   and channel list are legitimately per-sketch).
   `checkPendingCommand()`/`applyPendingCommand()` (added 2026-08-25) are the client half of
   the server's one-shot `device.pending_command` test mailbox
-  (`larsi.org/sensors/sensor-node.php`'s `Command:`/`pending_command` docs): `log()` parses
+  (`larsi.org/sensors/api.php`'s `Command:`/`pending_command` docs): `log()` parses
   a confirmed response's optional `Command: ...` line and persists it (free functions
   `pendingCommand()`/`setPendingCommand()`/`clearPendingCommand()` in
   `SensorNodeConfig.*`, deliberately not routed through the `SensorNodeConfig` struct/
@@ -236,7 +236,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   every single call, identical to `log()`'s pre-buffering behavior. A flush walks every
   slot from `tail` to `head`, building one request with repeated `data[]=`/`t[]=` pairs
   (`t[]` = seconds before `now`, matching the batched wire form `sensors/log.php`/
-  `sensors/sensor-node.php` already document and accept) -- `tail` only advances to `head`
+  `sensors/api.php` already document and accept) -- `tail` only advances to `head`
   once the response confirms `"Data logged"`; a failed or skipped flush leaves `tail`
   alone, so the next flush attempt naturally resends the whole backlog combined with
   whatever's accumulated since, with no separate retry path. A `log()` call that pushes

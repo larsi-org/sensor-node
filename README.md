@@ -1,7 +1,7 @@
 # sensor-node
 
 An Arduino library for ESP32-based sensor nodes that report to
-[larsi.org/sensors/log](https://larsi.org/sensors/sensor-node.php).
+[larsi.org/sensors/log](https://larsi.org/sensors/api.php#log-data).
 Handles Wi-Fi provisioning and posting readings; bring your own
 sensors.
 
@@ -30,7 +30,7 @@ adding one new network.
 The device id is what makes a single API key usable for more than
 one physical node without their channel numbers colliding -- each
 device id gets its own block of 16 channels (see "Data Channel" in the
-[wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
+[API reference](https://larsi.org/sensors/api.php#data-channel)).
 Different sensor nodes attached to the same location/key get different
 device ids; what sensors are actually wired to a given node is up to
 each sketch. If you have more than one device at a station and want to
@@ -109,7 +109,7 @@ Library" libraries from the Library Manager.
   `begin()` -- see `examples/BasicNode`/`examples/BME280Node` for the
   wiring (a button to GND).
 - `void checkPendingCommand()` -- checks for a one-shot test command left by an earlier
-  `log()` call (see below and [larsi.org/sensors/sensor-node.php](https://larsi.org/sensors/sensor-node.php)'s
+  `log()` call (see below and [larsi.org/sensors/api.php](https://larsi.org/sensors/api.php)'s
   `Command:`/`pending_command` docs), and if it's `"open_portal"` -- the only value this
   owns -- clears it and opens the setup portal (never returning). A no-op for anything
   else, including a command this build doesn't recognize at all: that's deliberately not
@@ -163,8 +163,8 @@ Library" libraries from the Library Manager.
   `config().reportEveryCycles`-th call actually POSTs anything,
   batching everything queued since the last confirmed flush into one
   request (`data[]`/`t[]` pairs -- see
-  [larsi.org/sensors/sensor-node.php](https://larsi.org/sensors/sensor-node.php)'s
-  Batched Reports section); `reportEveryCycles == 1` (the default)
+  [larsi.org/sensors/api.php#batched-reports](https://larsi.org/sensors/api.php#batched-reports)
+  section); `reportEveryCycles == 1` (the default)
   flushes every call, identical to this method's behavior before
   buffering existed. A queued-but-not-this-wake call returns `true`
   (queued, nothing was supposed to send yet); a flush-wake call returns
@@ -257,8 +257,8 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
   single pinned cert's ~1.4KB, doesn't fit this device's flash budget
   (it was already at 92% before any bundle).
 - The setup portal's access point is open (no password) and only runs
-  while unconfigured/disconnected -- get an API key first (see the
-  [wire protocol docs](https://larsi.org/sensors/sensor-node.php)).
+  while unconfigured/disconnected -- get an API key first (see
+  [Add a Sensor Node](https://larsi.org/sensors/sensor-node.php)).
 - The portal's Wi-Fi Password field is never pre-filled, even when
   re-opening the portal just to tweak the device name. Leave
   it blank to keep the saved password for an already-known network --
