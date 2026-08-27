@@ -2,6 +2,11 @@
 
 #include <Arduino.h>
 
+// Last 6 hex digits of WiFi.macAddress() (the per-device-unique tail, not the shared vendor
+// OUI) -- exposed so sketches can build their own short unique identifiers (e.g. an OLED
+// fallback title) the same way the AP name and default device name already do.
+String macSuffix();
+
 // Blocks forever: brings up an open Wi-Fi access point plus a captive
 // config portal (network picker, password, device name, device id,
 // write key, log frequency), saves whatever the user submits, then

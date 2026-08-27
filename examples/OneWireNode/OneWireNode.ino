@@ -33,6 +33,7 @@
 #include <OneWire.h>
 #include <SensorNode.h>
 #include <SensorNodeBattery.h>
+#include <SensorNodePortal.h>
 #include <Wire.h>
 
 // Optional Adafruit FeatherWing OLED (128x64, SH1107, I2C address 0x3C -- shares the Qwiic bus
@@ -155,7 +156,7 @@ void setup() {
   if (node.needsProvisioning()) node.provision(kChannels);
 
   const SensorNodeConfig &config = node.config();
-  oledTitle = config.deviceName.length() > 0 ? config.deviceName : "sensor-node: OneWireNode";
+  oledTitle = config.deviceName.length() > 0 ? config.deviceName : "OneWireNode " + macSuffix();
 
   Wire.begin();
   if (!battery.begin()) {

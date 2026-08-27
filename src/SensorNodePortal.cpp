@@ -11,6 +11,18 @@
 
 #include "SensorNodeConfig.h"
 
+// Last 6 hex digits of the MAC (its full non-OUI address space), not the first -- the first 3
+// octets are the vendor OUI, shared across a huge range of Espressif chips, so every device from
+// the same manufacturing batch would otherwise collide. The last 3 octets are the actual
+// per-device-unique part. Shared by the AP name and the default device name below -- declared in
+// SensorNodePortal.h (not anonymous-namespaced like the rest of this file's internals) so
+// sketches can build their own short unique identifiers with it too.
+String macSuffix() {
+  String mac = WiFi.macAddress();
+  mac.replace(":", "");
+  return mac.substring(mac.length() - 6);
+}
+
 namespace {
 
 const byte kDnsPort = 53;
@@ -22,16 +34,6 @@ bool saved = false;
 // handleSave()) once the user submits, not just because the portal was entered -- see
 // SensorNodePortal.h.
 uint32_t pendingFirmwareVersion = 0;
-
-// Last 6 hex digits of the MAC (its full non-OUI address space), not the first -- the first 3
-// octets are the vendor OUI, shared across a huge range of Espressif chips, so every device from
-// the same manufacturing batch would otherwise collide. The last 3 octets are the actual
-// per-device-unique part. Shared by the AP name and the default device name below.
-String macSuffix() {
-  String mac = WiFi.macAddress();
-  mac.replace(":", "");
-  return mac.substring(mac.length() - 6);
-}
 
 String htmlEscape(const String &in) {
   String out;

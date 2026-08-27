@@ -12,6 +12,7 @@
 #include <Adafruit_SH110X.h>
 #include <SensorNode.h>
 #include <SensorNodeBattery.h>
+#include <SensorNodePortal.h>
 #include <SparkFunBME280.h>
 #include <Wire.h>
 
@@ -113,7 +114,7 @@ void setup() {
   if (node.needsProvisioning()) node.provision(kChannels);
 
   const SensorNodeConfig &config = node.config();
-  oledTitle = config.deviceName.length() > 0 ? config.deviceName : "sensor-node: BME280";
+  oledTitle = config.deviceName.length() > 0 ? config.deviceName : "BME280 " + macSuffix();
 
   Wire.begin();
   if (!bme.beginI2C()) {

@@ -33,6 +33,7 @@
 #include <Adafruit_SH110X.h>
 #include <SensorNode.h>
 #include <SensorNodeBattery.h>
+#include <SensorNodePortal.h>
 #include <Wire.h>
 
 // Same reset pin and rationale as BasicNode.ino.
@@ -233,7 +234,7 @@ void setup() {
   if (node.needsProvisioning()) node.provision(kChannels);
 
   const SensorNodeConfig &config = node.config();
-  oledTitle = config.deviceName.length() > 0 ? config.deviceName : "sensor-node: DS18B20Grid";
+  oledTitle = config.deviceName.length() > 0 ? config.deviceName : "DS18B20Grid " + macSuffix();
 
   Wire.begin();
   if (!bridge.begin(&Wire)) {
