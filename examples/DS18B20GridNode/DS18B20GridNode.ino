@@ -233,7 +233,7 @@ void setup() {
   if (node.needsProvisioning()) node.provision(kChannels);
 
   const SensorNodeConfig &config = node.config();
-  oledTitle = config.deviceName.length() > 0 ? config.deviceName : "sensor-node: CoopGrid";
+  oledTitle = config.deviceName.length() > 0 ? config.deviceName : "sensor-node: DS18B20Grid";
 
   Wire.begin();
   if (!bridge.begin(&Wire)) {
