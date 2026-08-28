@@ -105,7 +105,9 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `property` is meant for the server/reports and can run long
   (`"Dew Point Temperature"`), too long for the 128x64 OLED's
   default-font grid (21 columns x 8 rows at `setTextSize(1)`).
-  `provision()` posts the device name/id/`reportEveryCycles` and a
+  `provision()` posts the device name/id/`reportEveryCycles`, this device's full MAC
+  (`WiFi.macAddress()`, colons stripped -- the server can't see a remote client's link-layer
+  address itself, so this is the one field firmware has to carry over explicitly), and a
   `channel_id,sensor,property,unit` list (`SensorNodeChannel[]`, one entry per channel --
   fixed per sketch in every example except `DS18B20GridNode.ino`, which builds its list at
   runtime from a fetched grid config, see below) to `/sensors/provision` -- gated by `needsProvisioning()`

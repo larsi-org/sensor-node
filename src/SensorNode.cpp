@@ -421,8 +421,15 @@ bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
     channelList += String(channels[i].id) + "," + channels[i].sensor + "," + channels[i].property + "," + channels[i].unit;
   }
 
+  // Full MAC, no colons -- the server can't see this itself (a remote HTTP request only carries
+  // the client's IP, never its link-layer address), so it has to ride along in the body like
+  // every other hardware fact provision() reports.
+  String mac = WiFi.macAddress();
+  mac.replace(":", "");
+
   String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId) +
-                "&name=" + config_.deviceName + "&logInterval=" + String(config_.logIntervalMinutes) +
+                "&name=" + config_.deviceName + "&mac=" + mac +
+                "&logInterval=" + String(config_.logIntervalMinutes) +
                 "&reportEvery=" + String(config_.reportEveryCycles) + "&channels=" + channelList;
   String response = postToServer(serverIp_, serverHost_, serverBasePath_ + "provision", body);
 

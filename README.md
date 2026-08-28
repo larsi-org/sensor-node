@@ -139,7 +139,13 @@ Library" libraries from the Library Manager.
   non-empty value for (so an empty `name=` never blanks out one set by
   hand, but a real name/sensor/property/unit does overwrite what was
   there) -- so it's harmless to call outside `needsProvisioning()`
-  too, just redundant once already confirmed. Call it after `begin()`,
+  too, just redundant once already confirmed. Also sends this device's
+  full MAC address (`WiFi.macAddress()`, colons stripped) as `mac=` --
+  the server has no way to see this itself (a remote HTTP request only
+  carries the client's IP, never its link-layer address), and it's the
+  one field that gets the non-empty-upsert treatment rather than
+  always-overwrite, same reasoning as `sensor`/`property`/`unit`. Call
+  it after `begin()`,
   guarded by `needsProvisioning()`, before the first `log()`. Returns
   true once the server confirms, which also clears
   `needsProvisioning()`; a false return leaves it set so the next
