@@ -8,5 +8,9 @@ bool SensorNodeBattery::begin(TwoWire &wirePort) {
 
 float SensorNodeBattery::readSOC() {
   if (!ready_) return NAN;
-  return gauge_.getSOC();
+  // The MAX17048's own SOC estimate can overshoot past 100% (seen most
+  // often while charging) -- a known quirk of its ModelGauge algorithm,
+  // not a bug in this wrapper. Clamp so callers always get a real 0-100%.
+  float soc = gauge_.getSOC();
+  return soc > 100.0f ? 100.0f : soc;
 }

@@ -219,8 +219,10 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
   vector, so the two never drift apart.
 - `bool begin(TwoWire &wirePort = Wire)` -- connects to the chip and
   runs `quickStart()`. Returns false if it doesn't respond.
-- `float readSOC()` -- state of charge, 0-100%. Returns `NAN` (which
-  `log()` then skips entirely) if `begin()` wasn't called or failed.
+- `float readSOC()` -- state of charge, 0-100% (clamped in software --
+  the MAX17048 chip's own estimate can overshoot past 100%, especially
+  while charging). Returns `NAN` (which `log()` then skips entirely) if
+  `begin()` wasn't called or failed.
 
 ## Notes
 

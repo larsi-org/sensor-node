@@ -26,7 +26,9 @@ class SensorNodeBattery {
   // channel 15 rather than needing separate handling in the sketch.
   bool begin(TwoWire &wirePort = Wire);
 
-  // State of charge, 0-100%. NAN if begin() wasn't called or failed.
+  // State of charge, 0-100% (clamped -- the MAX17048 itself can report
+  // slightly over 100%, especially while charging). NAN if begin() wasn't
+  // called or failed.
   float readSOC();
 
  private:

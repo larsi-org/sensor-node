@@ -176,8 +176,8 @@ void loop() {
     if (!isnan(ch15)) {
       // (soc+10)/20 in integer math is round-to-nearest-20% (equivalent to
       // floor(soc/20 + 0.5)), not floor(soc/20) -- floor alone would read as empty until 20%
-      // and never show a full icon until exactly 100%. constrain() clamps the fuel gauge's
-      // occasional >100% overshoot.
+      // and never show a full icon until exactly 100%. ch15 is already 0-100 here (readSOC()
+      // clamps the fuel gauge's occasional overshoot); constrain() is just defensive bounds.
       uint8_t barsLit = (uint8_t)constrain(((int)ch15 + 10) / 20, 0, 5);
       // kTitleWidth's last couple characters can land under this corner -- wipe it before
       // drawing, since drawBatteryIcon()'s outline/bars only ever set foreground pixels and

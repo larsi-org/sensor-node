@@ -295,7 +295,12 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   touch the battery channel at all -- a real departure from the
   library's "bring your own sensors, no other dependencies" stance
   everywhere else, accepted because the chip itself is on-board
-  hardware rather than an optional peripheral.
+  hardware rather than an optional peripheral. `readSOC()` clamps to
+  100% -- the MAX17048's own SOC estimate regularly overshoots past
+  100% while charging (a known quirk of its ModelGauge algorithm, not
+  a bug in this wrapper or upstream `SFE_MAX1704X`), and every sketch
+  logs the raw return value straight to the `sensors/log` API, so
+  clamping here is the one place that fixes it for every device.
 
 ## Networking
 
