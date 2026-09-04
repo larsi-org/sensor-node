@@ -81,21 +81,43 @@ void printReadings(const std::vector<float> &values) {
 
 // Top-line battery gauge, right-aligned. kTitleWidth (6px/char at text size 1) leaves the last
 // 2 characters' worth of pixels overlapping the icon's kBatteryIconWidth-pixel corner -- fine,
-// since that area gets cleared and redrawn whenever the icon actually draws (see loop()); when
+// since that area gets cleared and redrawn whenever the icon actually draws (see
+// drawTitleAndBattery()); when
 // it doesn't (no fuel gauge), those 2 extra characters of device name show instead of being
 // reserved-and-wasted.
 const size_t kTitleWidth = 21;
 const int16_t kBatteryIconWidth = 14;
 
-// A 13x7 outline + 1px nub, matching ~/Pictures/bat.png's hand-drawn reference icon (decoded
-// pixel-by-pixel rather than redrawn from memory) -- 5 fill bars at x=2,4,6,8,10, gaps at
-// x=3,5,7,9 always empty, drawn instead of blitted since the shape is simple enough that this
-// is fewer lines than embedding a bitmap.
-void drawBatteryIcon(int16_t x, int16_t y, uint8_t barsLit) {
-  oled.drawRect(x, y, 13, 7, SH110X_WHITE);
-  oled.drawFastVLine(x + 13, y + 2, 3, SH110X_WHITE);
-  for (uint8_t i = 0; i < barsLit && i < 5; i++) {
-    oled.fillRect(x + 2 + 2 * i, y + 2, 1, 3, SH110X_WHITE);
+// Draws the title bar: device name, plus a battery icon in the top-right corner when soc isn't
+// NAN -- same duplicated-by-design copy across every OLED-equipped example (simple enough that
+// copying it is fewer lines than sharing it). No icon at all (not an empty/0-bar one) when soc
+// is NAN -- (int)NAN isn't safe to feed into the bars-lit math below, and a 0-bar icon would
+// misleadingly read as "battery dead" instead of "no battery"; callers pass NAN before the fuel
+// gauge has been read yet (e.g. setup()'s title-only draw) to get a title with no icon.
+void drawTitleAndBattery(float soc) {
+  oled.clearDisplay();
+  oled.setCursor(0, 0);
+  oled.print(oledTitle.substring(0, kTitleWidth));
+  if (!isnan(soc)) {
+    // (soc+10)/20 in integer math is round-to-nearest-20% (equivalent to floor(soc/20 + 0.5)),
+    // not floor(soc/20) -- floor alone would read as empty until 20% and never show a full icon
+    // until exactly 100%. soc is already 0-100 here (readSOC() clamps the fuel gauge's
+    // occasional overshoot); constrain() is just defensive bounds.
+    uint8_t barsLit = (uint8_t)constrain(((int)soc + 10) / 20, 0, 5);
+    // kTitleWidth's last couple characters can land under this corner -- wipe it before drawing
+    // the icon, since its outline/bars only ever set foreground pixels and would otherwise
+    // leave stray text pixels showing through its gaps.
+    int16_t iconX = kScreenWidth - kBatteryIconWidth;
+    oled.fillRect(iconX, 0, kBatteryIconWidth, 8, SH110X_BLACK);
+    // A 13x7 outline + 1px nub, matching ~/Pictures/bat.png's hand-drawn reference icon (decoded
+    // pixel-by-pixel rather than redrawn from memory) -- 5 fill bars at iconX+2,4,6,8,10, gaps
+    // at iconX+3,5,7,9 always empty, drawn instead of blitted since the shape is simple enough
+    // that this is fewer lines than embedding a bitmap.
+    oled.drawRect(iconX, 0, 13, 7, SH110X_WHITE);
+    oled.drawFastVLine(iconX + 13, 2, 3, SH110X_WHITE);
+    for (uint8_t i = 0; i < barsLit && i < 5; i++) {
+      oled.fillRect(iconX + 2 + 2 * i, 2, 1, 3, SH110X_WHITE);
+    }
   }
 }
 
@@ -134,9 +156,7 @@ void setup() {
     // on with for the full settle delay below -- loop() (and its clearDisplay()) doesn't run
     // until after that delay, up to 3 minutes. No battery icon yet -- readSOC() isn't called
     // until loop() either.
-    oled.clearDisplay();
-    oled.setCursor(0, 0);
-    oled.print(oledTitle.substring(0, kTitleWidth));
+    drawTitleAndBattery(NAN);
     oled.display();
   }
 
@@ -167,24 +187,7 @@ void loop() {
   // "Current values" text screen -- entirely skipped if the OLED wasn't
   // detected at boot, so this is a no-op on a board with none wired up.
   if (oledPresent) {
-    oled.clearDisplay();
-    oled.setCursor(0, 0);
-    oled.print(oledTitle.substring(0, kTitleWidth));
-    // No icon at all (not an empty/0-bar one) when the fuel gauge isn't present -- (int)NAN
-    // isn't safe to feed into the bars-lit math below, and a 0-bar icon would misleadingly
-    // read as "battery dead" instead of "no battery".
-    if (!isnan(ch15)) {
-      // (soc+10)/20 in integer math is round-to-nearest-20% (equivalent to
-      // floor(soc/20 + 0.5)), not floor(soc/20) -- floor alone would read as empty until 20%
-      // and never show a full icon until exactly 100%. ch15 is already 0-100 here (readSOC()
-      // clamps the fuel gauge's occasional overshoot); constrain() is just defensive bounds.
-      uint8_t barsLit = (uint8_t)constrain(((int)ch15 + 10) / 20, 0, 5);
-      // kTitleWidth's last couple characters can land under this corner -- wipe it before
-      // drawing, since drawBatteryIcon()'s outline/bars only ever set foreground pixels and
-      // would otherwise leave stray text pixels showing through the icon's gaps.
-      oled.fillRect(kScreenWidth - kBatteryIconWidth, 0, kBatteryIconWidth, 8, SH110X_BLACK);
-      drawBatteryIcon(kScreenWidth - kBatteryIconWidth, 0, barsLit);
-    }
+    drawTitleAndBattery(ch15);
     oled.setCursor(0, 8);
     // Reads label/decimalPlaces/unit straight from kChannels, so the OLED can't drift from
     // what log() above and provision() actually use -- all three read the same rows.

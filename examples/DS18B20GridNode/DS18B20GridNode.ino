@@ -1,9 +1,9 @@
-// Generic DS18B20 grid node: up to 3 columns (A/B/C), each its own physical 1-Wire line on one
+// Generic DS18B20 grid node: up to 4 columns (A/B/C/D), each its own physical 1-Wire line on one
 // of the DS2482-800's 8 channels, up to 7 probes (vertical slices) per column -- channel budget
 // is 15 total across all columns (server channel ids 0-14) plus channel 15 for the onboard
-// MAX17048 battery, so a single column can use all 7 while two others sit unused, or all three
-// can be populated as long as they don't collectively exceed 15 (e.g. 5/5/5, or 7/7/1, or
-// 7/6/2 -- any split works, not just an even one).
+// MAX17048 battery, so a single column can use all 7 while the other three sit unused, or all
+// four can be populated as long as they don't collectively exceed 15 (e.g. 5/5/5/0, 7/7/1/0, or
+// 4/4/4/3 -- any split works, not just an even one).
 //
 // Requires the "Adafruit DS248x" library (Arduino Library Manager) for the DS2482-800/DS2484
 // I2C-to-1-Wire bridge. Deliberately NOT DallasTemperature/OneWire -- Adafruit_DS248x's
@@ -27,20 +27,21 @@
 // search (both tried in earlier revisions of this sketch) -- the real per-deployment layout now
 // lives server-side as a small hand-authored file, editable without reflashing.
 //
-// File format: one line per column, in order (line 1 = column A, line 2 = B, line 3 = C -- a
-// file with only 1 or 2 lines just leaves the rest unconfigured), each a comma-separated list
-// of that column's probes' 64-bit ROM codes as 16 hex chars (no "0x", no separators within one
-// ID -- e.g. "284A5CD703000073"), top-to-bottom/first-to-last. A column can list 0-7 IDs
-// (kMaxProbesPerColumn); the columns don't all need the same count -- an asymmetric grid (e.g.
-// 7 on A, 3 on B, nothing on C) is exactly as valid as a uniform one, which is the whole reason
-// this is free-form CSV-per-line rather than a fixed "columns,rows" header. The only other
-// limit is the 15-channel budget shared across every column combined (see the top comment) --
-// parsing stops accepting new IDs once that's hit, wherever in the file that happens to be.
-// Channel ids are assigned consecutively in file order (column A's IDs first, then B's, then
-// C's) -- e.g. a 2-line file "a1,a2,a3\nb1,b2,b3" assigns channel 0=a1, 1=a2, 2=a3, 3=b1, 4=b2,
-// 5=b3 (channel 15 is always the battery, never part of this count). Blank lines and blank/
-// malformed individual IDs are skipped with a Serial warning rather than aborting the whole
-// parse -- a typo in one ID shouldn't cost every other probe in the file.
+// File format: one line per column, in order (line 1 = column A, line 2 = B, line 3 = C, line 4
+// = D -- a file with fewer than 4 lines just leaves the rest unconfigured), each a comma-
+// separated list of that column's probes' 64-bit ROM codes as 16 hex chars (no "0x", no
+// separators within one ID -- e.g. "284A5CD703000073"), top-to-bottom/first-to-last. A column
+// can list 0-7 IDs (kMaxProbesPerColumn); the columns don't all need the same count -- an
+// asymmetric grid (e.g. 7 on A, 3 on B, nothing on C or D) is exactly as valid as a uniform one,
+// which is the whole reason this is free-form CSV-per-line rather than a fixed "columns,rows"
+// header. The only other limit is the 15-channel budget shared across every column combined
+// (see the top comment) -- parsing stops accepting new IDs once that's hit, wherever in the
+// file that happens to be. Channel ids are assigned consecutively in file order (column A's IDs
+// first, then B's, then C's, then D's) -- e.g. a 2-line file "a1,a2,a3\nb1,b2,b3" assigns
+// channel 0=a1, 1=a2, 2=a3, 3=b1, 4=b2, 5=b3 (channel 15 is always the battery, never part of
+// this count). Blank lines and blank/malformed individual IDs are skipped with a Serial warning
+// rather than aborting the whole parse -- a typo in one ID shouldn't cost every other probe in
+// the file.
 
 #include <Adafruit_DS248x.h>
 #include <Adafruit_SH110X.h>
@@ -60,18 +61,18 @@ const uint32_t kFirmwareVersion = 1;
 // 0x18-0x1F), so there's no need to move off the default.
 Adafruit_DS248x bridge;
 
-// Up to 3 columns (A/B/C), each its own DS2482-800 channel and its own physical 1-Wire line.
-// Channels 3-7 go unused -- see the library's CLAUDE.md note on this project's line layout
+// Up to 4 columns (A/B/C/D), each its own DS2482-800 channel and its own physical 1-Wire line.
+// Channels 4-7 go unused -- see the library's CLAUDE.md note on this project's line layout
 // ruling out one-probe-per-channel. kMaxProbesPerColumn/kMaxTotalProbes are ceilings the parser
 // enforces (see the file header comment); columnCount/probeCountPerColumn are this boot's
 // actual parsed shape, which can be smaller in every dimension.
-const uint8_t kMaxColumns = 3;
+const uint8_t kMaxColumns = 4;
 const uint8_t kMaxProbesPerColumn = 7;
 const uint8_t kMaxTotalProbes = 15;  // channel ids 0-14; 15 is always the battery
-const uint8_t kBridgeChannel[kMaxColumns] = {0, 1, 2};
+const uint8_t kBridgeChannel[kMaxColumns] = {0, 1, 2, 3};
 
 uint8_t columnCount = 0;
-uint8_t probeCountPerColumn[kMaxColumns] = {0, 0, 0};
+uint8_t probeCountPerColumn[kMaxColumns] = {0, 0, 0, 0};
 uint8_t romId[kMaxColumns][kMaxProbesPerColumn][8];
 bool probeFound[kMaxColumns][kMaxProbesPerColumn];
 
@@ -96,29 +97,27 @@ bool oledPresent = false;
 String oledTitle;  // deviceName, else a hardcoded fallback -- set in setup()
 
 // Row 0: title + battery icon (kTitleWidth/kBatteryIconWidth, same layout as BME280Node.ino).
-// Rows 1-7: one vertical slice per row, columnCount columns per row (up to kMaxProbesPerColumn
-// rows total, filling the screen's remaining 7 rows exactly -- no blank spacer row anymore,
-// since 7 rows is the whole point of the budget above). Each column is a 5-char right-justified
-// numeric field plus a literal "C" unit suffix (kValueNumericWidth + 1 = 6 chars), joined by
-// single "|" dividers between columns (not after the last one) -- e.g.
-// " 28.3C|-10.5C|  0.3C" for a 3-column row, 3 x 6 + 2 = 20 characters. Only the columns/rows
-// this boot's parsed grid actually has are drawn (not always 3x7) -- a shorter column within a
-// taller grid still gets its empty cells rendered as "--" so the grid stays rectangular, but a
-// column that doesn't exist at all isn't given a phantom slot.
+// Rows 1-7: one vertical slice per row, but only ever kDisplayColumns (2) wide on screen at a
+// time -- there's no room left for a legible 3-or-4-wide row once each column carries a label
+// (see below). A grid with more than kDisplayColumns columns (3- or 4-column, C/D configured)
+// pages between them instead of dropping the extras -- see loop()'s paging block, drawGridPage()
+// and drawTitleAndBattery(). Each shown column is a fixed kColumnFieldWidth (10) chars: a
+// kLabelWidth (4) probe-position label ("A1: ".."D7: " -- column letter + 1-digit probe
+// number, always 1 digit since kMaxProbesPerColumn is 7) followed by the same 6-char value
+// field as before (kValueFieldWidth, unchanged -- see formatValue()), joined by a single "|"
+// between the two columns on a page (not after the last one) -- e.g. "A1: 28.3C|B1:-10.5C",
+// 10 + 1 + 10 = 21 characters, exactly kTitleWidth/the screen's usable width. A shorter column
+// within a taller grid still gets its empty cells rendered as "--" (see formatValue()) so both
+// columns on a page stay the same height, but a column is only drawn at all when columnCount
+// includes it -- a single-column grid (A only) prints just the 10-char field with no trailing
+// "|", and a 3-column grid's second page is likewise just "C..." with no trailing "|".
 const size_t kTitleWidth = 21;
 const int16_t kBatteryIconWidth = 14;
 const size_t kValueNumericWidth = 5;
 const size_t kValueFieldWidth = kValueNumericWidth + 1;  // + 1 for the "C" unit suffix
-
-// A 13x7 outline + 1px nub, matching ~/Pictures/bat.png's hand-drawn reference icon -- same
-// duplicated-by-design copy as BME280Node.ino's drawBatteryIcon().
-void drawBatteryIcon(int16_t x, int16_t y, uint8_t barsLit) {
-  oled.drawRect(x, y, 13, 7, SH110X_WHITE);
-  oled.drawFastVLine(x + 13, y + 2, 3, SH110X_WHITE);
-  for (uint8_t i = 0; i < barsLit && i < 5; i++) {
-    oled.fillRect(x + 2 + 2 * i, y + 2, 1, 3, SH110X_WHITE);
-  }
-}
+const uint8_t kDisplayColumns = 2;  // OLED shows only columns A/B; C (if configured) still logs
+const size_t kLabelWidth = 4;       // e.g. "A1: " -- column letter + 1-digit probe number + ": "
+const size_t kColumnFieldWidth = kLabelWidth + kValueFieldWidth;  // 10 -- label + value, per column
 
 // Right-justifies a temperature into kValueNumericWidth characters plus a literal "C" unit
 // suffix, e.g. " 28.3C" / "-10.5C" / "  0.3C". A missing probe (NAN) has no unit to report, so
@@ -133,6 +132,14 @@ String formatValue(float value) {
   } else {
     snprintf(buf, sizeof(buf), "%*.1fC", (int)kValueNumericWidth, value);
   }
+  return String(buf);
+}
+
+// Formats a probe's on-screen position label, e.g. "A1: " / "B7: " -- always kLabelWidth (4)
+// chars since row is 0-based and kMaxProbesPerColumn (7) keeps row + 1 a single digit.
+String formatProbeLabel(uint8_t col, uint8_t row) {
+  char buf[kLabelWidth + 1];
+  snprintf(buf, sizeof(buf), "%c%u: ", (char)('A' + col), row + 1);
   return String(buf);
 }
 
@@ -215,7 +222,7 @@ bool parseRomId(const String &text, uint8_t rom[8]) {
 // entry doesn't cost every other probe in the file.
 bool parseGridConfig(const String &text) {
   uint8_t newColumnCount = 0;
-  uint8_t newProbeCountPerColumn[kMaxColumns] = {0, 0, 0};
+  uint8_t newProbeCountPerColumn[kMaxColumns] = {0, 0, 0, 0};
   uint8_t newRomId[kMaxColumns][kMaxProbesPerColumn][8];
   uint8_t totalProbes = 0;
 
@@ -257,6 +264,74 @@ bool parseGridConfig(const String &text) {
   memcpy(probeCountPerColumn, newProbeCountPerColumn, sizeof(probeCountPerColumn));
   memcpy(romId, newRomId, sizeof(romId));
   return true;
+}
+
+// How long a page-flip cycle shows one page's columns before switching to the next --
+// see loop()'s paging block.
+const unsigned long kPageMs = 15UL * 1000;
+
+// Draws the title bar: device name, plus a battery icon in the top-right corner when soc isn't
+// NAN -- same duplicated-by-design copy across every OLED-equipped example (simple enough that
+// copying it is fewer lines than sharing it). No icon at all (not an empty/0-bar one) when soc
+// is NAN -- (int)NAN isn't safe to feed into the bars-lit math below, and a 0-bar icon would
+// misleadingly read as "battery dead" instead of "no battery"; callers pass NAN before the fuel
+// gauge has been read yet (e.g. setup()'s title-only draw) to get a title with no icon.
+void drawTitleAndBattery(float soc) {
+  oled.clearDisplay();
+  oled.setCursor(0, 0);
+  oled.print(oledTitle.substring(0, kTitleWidth));
+  if (!isnan(soc)) {
+    // (soc+10)/20 in integer math is round-to-nearest-20% (equivalent to floor(soc/20 + 0.5)),
+    // not floor(soc/20) -- floor alone would read as empty until 20% and never show a full icon
+    // until exactly 100%. soc is already 0-100 here (readSOC() clamps the fuel gauge's
+    // occasional overshoot); constrain() is just defensive bounds.
+    uint8_t barsLit = (uint8_t)constrain(((int)soc + 10) / 20, 0, 5);
+    // kTitleWidth's last couple characters can land under this corner -- wipe it before drawing
+    // the icon, since its outline/bars only ever set foreground pixels and would otherwise
+    // leave stray text pixels showing through its gaps.
+    int16_t iconX = kScreenWidth - kBatteryIconWidth;
+    oled.fillRect(iconX, 0, kBatteryIconWidth, 8, SH110X_BLACK);
+    // A 13x7 outline + 1px nub, matching ~/Pictures/bat.png's hand-drawn reference icon (decoded
+    // pixel-by-pixel rather than redrawn from memory) -- 5 fill bars at iconX+2,4,6,8,10, gaps
+    // at iconX+3,5,7,9 always empty, drawn instead of blitted since the shape is simple enough
+    // that this is fewer lines than embedding a bitmap.
+    oled.drawRect(iconX, 0, 13, 7, SH110X_WHITE);
+    oled.drawFastVLine(iconX + 13, 2, 3, SH110X_WHITE);
+    for (uint8_t i = 0; i < barsLit && i < 5; i++) {
+      oled.fillRect(iconX + 2 + 2 * i, 2, 1, 3, SH110X_WHITE);
+    }
+  }
+}
+
+// Draws one page's worth of columns (kDisplayColumns wide, starting at startCol) below the
+// title bar -- startCol 0 is A|B, kDisplayColumns (2) is C|D (or just C, on a 3-column grid).
+// See the kTitleWidth-area comment above for the per-column "A1: 28.3C" label+value layout.
+void drawGridPage(const float reading[kMaxColumns][kMaxProbesPerColumn], uint8_t startCol) {
+  uint8_t endCol = min((uint8_t)(startCol + kDisplayColumns), columnCount);
+  uint8_t maxRows = 0;
+  for (uint8_t col = startCol; col < endCol; col++) {
+    if (probeCountPerColumn[col] > maxRows) maxRows = probeCountPerColumn[col];
+  }
+
+  oled.setCursor(0, 8);  // no blank spacer row -- see the file header comment
+  for (uint8_t row = 0; row < maxRows; row++) {
+    String line;
+    for (uint8_t col = startCol; col < endCol; col++) {
+      if (col > startCol) line += "|";
+      line += formatProbeLabel(col, row);
+      float value = row < probeCountPerColumn[col] ? reading[col][row] : NAN;
+      line += formatValue(value);
+    }
+    oled.println(line);
+  }
+}
+
+// Title/battery + one page of columns, then flips the physical display -- the one thing every
+// oledPresent branch in loop() calls.
+void renderPage(const float reading[kMaxColumns][kMaxProbesPerColumn], float soc, uint8_t startCol) {
+  drawTitleAndBattery(soc);
+  drawGridPage(reading, startCol);
+  oled.display();
 }
 
 SensorNode node;
@@ -315,10 +390,9 @@ void setup() {
     oled.setTextSize(1);
     // Show the device name right away rather than leaving the display in whatever it powered on
     // with for the full settle delay below -- loop() (and its clearDisplay()) doesn't run until
-    // after that delay, up to 3 minutes.
-    oled.clearDisplay();
-    oled.setCursor(0, 0);
-    oled.print(oledTitle.substring(0, kTitleWidth));
+    // after that delay, up to 3 minutes. No battery icon yet -- readSOC() isn't called until
+    // loop() either.
+    drawTitleAndBattery(NAN);
     oled.display();
   }
 
@@ -346,12 +420,10 @@ void loop() {
   delay(750);
 
   float reading[kMaxColumns][kMaxProbesPerColumn];
-  uint8_t maxRows = 0;
   std::vector<float> values;
   values.reserve(kMaxTotalProbes + 1);
   for (uint8_t col = 0; col < columnCount; col++) {
     bridge.selectChannel(kBridgeChannel[col]);
-    if (probeCountPerColumn[col] > maxRows) maxRows = probeCountPerColumn[col];
     for (uint8_t row = 0; row < probeCountPerColumn[col]; row++) {
       float value = NAN;
       if (probeFound[col][row]) value = readTemperature(romId[col][row]);
@@ -364,32 +436,34 @@ void loop() {
   node.log(channels, values);
   node.applyPendingCommand();
 
-  // Title + battery icon, then the grid -- no per-reading label text (that's the "render
-  // differently" layout still to come), just the fixed-width numeric columns, sized to
-  // whatever shape this boot's grid config actually parsed to (not always 3 wide/7 tall).
-  if (oledPresent) {
-    oled.clearDisplay();
-    oled.setCursor(0, 0);
-    oled.print(oledTitle.substring(0, kTitleWidth));
-    float soc = values.back();
-    if (!isnan(soc)) {
-      uint8_t barsLit = (uint8_t)constrain(((int)soc + 10) / 20, 0, 5);
-      oled.fillRect(kScreenWidth - kBatteryIconWidth, 0, kBatteryIconWidth, 8, SH110X_BLACK);
-      drawBatteryIcon(kScreenWidth - kBatteryIconWidth, 0, barsLit);
-    }
+  unsigned long intervalMs = node.config().logIntervalMinutes * 60UL * 1000;
+  float soc = values.back();
 
-    oled.setCursor(0, 8);  // no blank spacer row -- see the file header comment
-    for (uint8_t row = 0; row < maxRows; row++) {
-      String line;
-      for (uint8_t col = 0; col < columnCount; col++) {
-        if (col > 0) line += "|";
-        float value = row < probeCountPerColumn[col] ? reading[col][row] : NAN;
-        line += formatValue(value);
-      }
-      oled.println(line);
-    }
-    oled.display();
+  if (!oledPresent) {
+    delay(intervalMs);
+    return;
   }
 
-  delay(node.config().logIntervalMinutes * 60UL * 1000);
+  if (columnCount <= kDisplayColumns) {
+    // Everything fits on one page -- render once and sleep for the rest of the interval, same
+    // as before paging existed.
+    renderPage(reading, soc, 0);
+    delay(intervalMs);
+    return;
+  }
+
+  // More columns than fit on screen at once (a 3- or 4-column grid): page-flip between A|B and
+  // C|D (or just C, on a 3-column grid) every kPageMs for the whole interval, rather than
+  // rendering once and sleeping -- the display itself replaces the sleep, so no trailing
+  // delay() at the end; loop() just returns and gets called again immediately for the next
+  // reading.
+  unsigned long elapsed = 0;
+  uint8_t startCol = 0;
+  while (elapsed < intervalMs) {
+    renderPage(reading, soc, startCol);
+    unsigned long thisPageMs = min(kPageMs, intervalMs - elapsed);
+    delay(thisPageMs);
+    elapsed += thisPageMs;
+    startCol = (startCol == 0) ? kDisplayColumns : 0;
+  }
 }
