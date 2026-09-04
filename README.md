@@ -208,7 +208,7 @@ Library" libraries from the Library Manager.
   key never ends up in the web server's access log, same reason `log()`/`provision()` are
   POST-only. Unlike those two, this doesn't touch NVS or any persisted state -- a plain fetch
   for a sketch that needs its own server-hosted config beyond `provision()`'s fixed fields, e.g.
-  `examples/DS18B20GridNode`'s per-deployment ROM-ID grid layout, served by
+  `examples/DS18B20GridNode`/`examples/OneWireNode`'s per-deployment ROM-ID grid layout, served by
   `larsi-org/html`'s `sensors/config.php` (which resolves `key` to a location prefix
   server-side, the same way `sensors/log.php`/`provision.php` do). Call after `begin()` has
   connected.
@@ -260,10 +260,9 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
   Sectigo, DigiCert), picked from public CA market-share data. See
   that header for the full reasoning and the removal order if flash
   pressure ever forces trimming it back down. A full public-CA-store
-  bundle was considered and ruled out -- ~55KB of cert data plus ~71KB
-  of extra linked code to search/verify a bundle at all, versus a
-  single pinned cert's ~1.4KB, doesn't fit this device's flash budget
-  (it was already at 92% before any bundle).
+  bundle doesn't fit this device's flash budget -- ~55KB of cert data
+  plus ~71KB of extra linked code to search/verify a bundle at all,
+  versus a single pinned cert's ~1.4KB.
 - The setup portal's access point is open (no password) and only runs
   while unconfigured/disconnected -- get an API key first (see
   [Add a Sensor Node](https://larsi.org/sensors/sensor-node.php)).

@@ -10,27 +10,20 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 - `SensorNodeConfig` (`src/SensorNodeConfig.*`) -- `ssids[]`/
   `passwords[]` (fixed-size arrays, `kMaxNetworks` = 3, most-recently-
   added first, NVS keys `ssid0`/`password0`/`ssid1`/...) plus
-  `deviceName`/`deviceId`/`writeKey`/`logIntervalMinutes`/`reportEveryCycles`, all
+  `deviceName`/`deviceId`/`writeKey`/`logIntervalMinutes`/`reportEveryCycles`/`serverUrl`, all
   persisted via `Preferences` (NVS). `writeKey` is displayed/documented everywhere as "API key"
-  (renamed 2026-08-27 -- the same credential now also gates the read-only `sensors/config`
-  endpoint, not just writes) but keeps its old field/NVS-key name deliberately, to avoid
-  orphaning what's already saved on a flashed device -- see `SensorNodePortal.cpp`'s note at the
-  API key form field. `reportEveryCycles` (1-12, default 1, added
-  2026-08-25) drives `SensorNode::log()`'s own flush cadence (added 2026-08-26, see the RTC
-  ring buffer section below) and also rides along on `provision()`'s POST body so the
-  server can size `zeus_minutes` to match. `serverUrl` (added 2026-08-27, default
-  `"https://larsi.org/sensors/"` via `loadSensorNodeConfig()`'s `getString()` default) is the
-  base URL `log()`/`provision()` build their requests against -- `parseServerUrl()`
-  (`SensorNodePortal.h`) splits it into a bare hostname and a base path guaranteed to end in
-  `/`, discarding whatever scheme was typed (this library always connects over TLS on port 443
-  regardless -- no port-override support). A `deviceLocation` field briefly existed here (2026-08-23 to
-  2026-08-24) alongside `device.device_location` server-side -- merged
-  back into `deviceName` and dropped: most stations only ever have one
-  device, and where they don't (`thecoop`), what actually distinguishes
-  them is role ("Solar Radiation", "ElitePro Power Meter"), not
-  physical location, so a dedicated location field was the wrong shape
-  more often than it fit. `saveSensorNodeConfig()` purges any stale
-  `deviceLocation` NVS key left over from that window.
+  (the same credential gates both writes and the read-only `sensors/config` endpoint) but keeps
+  its old field/NVS-key name for compatibility with already-flashed devices -- see
+  `SensorNodePortal.cpp`'s note at the API key form field. `reportEveryCycles` (1-12, default 1)
+  drives `SensorNode::log()`'s own flush cadence (see the RTC ring buffer section below) and
+  also rides along on `provision()`'s POST body so the server can size `zeus_minutes` to match.
+  `serverUrl` (default `"https://larsi.org/sensors/"` via `loadSensorNodeConfig()`'s
+  `getString()` default) is the base URL `log()`/`provision()` build their requests against --
+  `parseServerUrl()` (`SensorNodePortal.h`) splits it into a bare hostname and a base path
+  guaranteed to end in `/`, discarding whatever scheme was typed (this library always connects
+  over TLS on port 443 regardless -- no port-override support). There's no separate device-
+  location field -- `deviceName` (free text) is what distinguishes multiple devices at one
+  station.
 - `SensorNodePortal` (`src/SensorNodePortal.*`) -- open AP + captive
   portal (`WebServer` + `DNSServer` catch-all) used only while none of
   the known networks connect. `runSensorNodeSetupPortal()` blocks
@@ -61,7 +54,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   if none connect, then resolves the server and syncs the clock via
   NTP. `log()` sends `device` and `data` as separate form fields per the
   wire protocol (see `https://larsi.org/sensors/api.php` in the
-  main site repo -- split out of `sensor-node.php`, now onboarding-only, 2026-08-27) and writes it as a raw HTTP/1.1 request directly to a
+  main site repo) and writes it as a raw HTTP/1.1 request directly to a
   `WiFiClientSecure` (see Networking below for why, not `HTTPClient`).
   `log()` takes `(SensorNodeChannel[], float[])`, not just a plain
   `float[]`. `values` is zipped *positionally* against `channels`
@@ -74,12 +67,10 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   buffering it (see the RTC ring buffer paragraph below) -- that's
   what lets a sketch skip hand-padding `NAN`s up to a gap like channel
   15 (`examples/BME280Node`: `node.log(kChannels, {ch0, ch1, ch2, ch3,
-  ch15})` -- no channels 4-14 to write out by hand). A flush now always
-  serializes all 16 ids per queued entry (added 2026-08-26, see below),
-  not just up to the highest id used that call -- the log endpoint's
-  per-entry parsing already treats a trailing empty field the same as
-  a missing one, so this is wire-compatible, just a few bytes larger.
-  `values` can also
+  ch15})` -- no channels 4-14 to write out by hand). A flush always
+  serializes all 16 ids per queued entry, not just up to the highest id used that call -- the
+  log endpoint's per-entry parsing already treats a trailing empty field the same as a missing
+  one, so this is wire-compatible, just a few bytes larger. `values` can also
   be shorter than `channels`, to report only the first several without
   slicing `channels` itself. The zip being positional (not id-keyed)
   is a real trade -- reordering `channels` without updating every
@@ -109,8 +100,8 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   (`WiFi.macAddress()`, colons stripped -- the server can't see a remote client's link-layer
   address itself, so this is the one field firmware has to carry over explicitly), and a
   `channel_id,sensor,property,unit` list (`SensorNodeChannel[]`, one entry per channel --
-  fixed per sketch in every example except `DS18B20GridNode.ino`, which builds its list at
-  runtime from a fetched grid config, see below) to `/sensors/provision` -- gated by `needsProvisioning()`
+  fixed per sketch in every example except `DS18B20GridNode.ino`/`OneWireNode.ino`, which build
+  their list at runtime from a fetched grid config, see below) to `/sensors/provision` -- gated by `needsProvisioning()`
   (`SensorNodeConfig`'s `provisionPending` NVS flag), not called
   unconditionally every boot: it can't run from inside the portal
   itself (the device isn't online as a station yet at that point), so
@@ -131,17 +122,17 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `provision()` share a `postToServer(host, path, body)` helper for the
   connect/write/read boilerplate; `connectToServer()` factors out just the TLS
   connect-with-one-retry step, in case a future caller besides `postToServer()` needs it.
-  `SensorNode::fetchConfig()` (added 2026-08-27) POSTs `key`/`device` (the same auth every other
+  `SensorNode::fetchConfig()` POSTs `key`/`device` (the same auth every other
   endpoint uses -- POST, not GET, so the API key never ends up in the access log) to the
   server's `config` endpoint and returns just the response body via `extractBody()` (empty on
   any failure, including a non-200 status -- unlike `log()`/`provision()`, which just
   substring-search the full raw response, this caller needs clean content with no stray header
   bytes). A plain fetch for a sketch that needs its own server-hosted config beyond
-  `provision()`'s fixed fields, e.g. `DS18B20GridNode.ino` fetching its per-deployment ROM-ID
-  grid layout from `sensors/config.php` (`larsi-org/html` repo) -- that endpoint resolves `key`
-  to a prefix server-side the same way `log.php`/`provision.php` do, so the device itself never
-  needs to know its own prefix. Doesn't touch NVS or any persisted state, unlike `log()`/
-  `provision()`. `sanitizeHostname()` derives the
+  `provision()`'s fixed fields, e.g. `DS18B20GridNode.ino`/`OneWireNode.ino` fetching their
+  per-deployment ROM-ID grid layout from `sensors/config.php` (`larsi-org/html` repo) -- that
+  endpoint resolves `key` to a prefix server-side the same way `log.php`/`provision.php` do, so
+  the device itself never needs to know its own prefix. Doesn't touch NVS or any persisted
+  state, unlike `log()`/`provision()`. `sanitizeHostname()` derives the
   network hostname from `deviceName` (letters/digits/hyphens only,
   runs of anything else collapsed to one `-`) -- `deviceName` stays
   free-text and unsanitized everywhere else (`provision()`'s `name=`,
@@ -158,10 +149,10 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   jobs, no second pin needed, same pattern as a router's reset button.
   This one method is the only thing extracted into the library so far
   from what was originally per-example boilerplate; `Serial.begin()`/
-  `delay(1000)` and the `provision()` call (now gated on
+  `delay(1000)` and the `provision()` call (gated on
   `needsProvisioning()`) are left in each sketch on purpose (baud rate
   and channel list are legitimately per-sketch).
-  `checkPendingCommand()`/`applyPendingCommand()` (added 2026-08-25) are the client half of
+  `checkPendingCommand()`/`applyPendingCommand()` are the client half of
   the server's one-shot `device.pending_command` test mailbox
   (`larsi.org/sensors/api.php`'s `Command:`/`pending_command` docs): `log()` parses
   a confirmed response's optional `Command: ...` line and persists it (free functions
@@ -169,11 +160,11 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `SensorNodeConfig.*`, deliberately not routed through the `SensorNodeConfig` struct/
   `config_` -- same reason `firmwareVersionChanged()` is a free function, see below);
   `applyPendingCommand()` (called from `loop()`, right after `log()`) is a small allowlist
-  of commands that don't need `begin()` to not have connected yet -- currently just
-  `"scan_i2c"` (added 2026-08-25: sweeps every I2C address, `Serial.printf`s whatever
+  of commands that don't need `begin()` to have connected -- currently just
+  `"scan_i2c"` (sweeps every I2C address, `Serial.printf`s whatever
   ACKed, `clearPendingCommand()`s itself, returns -- see `scanI2CBus()`, an anonymous-
   namespace helper needing `SensorNode.cpp`'s only `#include <Wire.h>`, since `Wire.begin()`
-  had until now always been the sketch's own job, e.g. `BME280Node.ino`). Deliberately
+  is always the sketch's own job, e.g. `BME280Node.ino`). Deliberately
   Serial-only, never reported back to the server: it's a bench-testing aid for whoever's
   physically at the device with a serial connection already open (see
   [[bench-test-serial-only]]), so there's no reason to round-trip the result anywhere.
@@ -189,31 +180,26 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   one) has no other way to do that, while a command like `scan_i2c` that doesn't share
   that constraint gets to skip the reboot round-trip entirely.
 
-  **Anything neither method recognizes is left completely untouched** (2026-08-25 revision
-  -- both used to have a catch-all: `applyPendingCommand()` defaulted unrecognized commands
-  to a restart, `checkPendingCommand()` defaulted to clearing-and-dropping them). That
-  catch-all was actively wrong for a real case that came up while scoping 1-Wire/DS18B20
-  support: a sketch-specific command like `scan_1wire` needs the third-party `OneWire`
-  library, and since Arduino compiles every `.cpp` under `src/` regardless of what a sketch
-  `#include`s (the same reason `SensorNodeBattery` already applies to every sketch, see
-  above), baking `scan_1wire` into this library the same way as `scan_i2c` would force
-  `OneWire` onto every sketch using `SensorNode`, not just ones with a 1-Wire bus --
-  unlike `Wire`/I2C, `OneWire` doesn't ship with the ESP32 core, so this is a real added
-  dependency, not a free one (worth separately noting: `OneWire`'s current *published*
-  release, 2.3.8, doesn't even compile on ESP32-C6 at all -- the fix landed on GitHub `main`
-  in June 2025 but isn't in a tagged release yet, so using it here means installing from
-  GitHub directly, not Library Manager, until that changes). Leaving unrecognized commands
-  alone instead makes `pendingCommand()`/`setPendingCommand()`/`clearPendingCommand()`
+  **Anything neither method recognizes is left completely untouched.** This makes
+  `pendingCommand()`/`setPendingCommand()`/`clearPendingCommand()`
   (`SensorNodeConfig.h`) a general extension point: a sketch owns its own command name
   entirely, checking/clearing it itself (typically right after `applyPendingCommand()` in
-  `loop()`), so a sketch-specific dependency never has to touch this library at all. The
-  trade-off: a command nothing ever claims (a typo, or one written for firmware that
-  predates it) no longer self-clears -- it sits in `pending_command` until someone notices
-  and clears it by hand. Acceptable since this mailbox is a manually-triggered testing aid,
-  not high-volume traffic.
+  `loop()`), so a sketch-specific dependency never has to touch this library at all -- e.g.
+  `OneWireNode.ino`'s `scan_1wire` command needs the third-party `OneWire` library, and since
+  Arduino compiles every `.cpp` under `src/` regardless of what a sketch `#include`s (the same
+  reason `SensorNodeBattery` already applies to every sketch, see above), baking `scan_1wire`
+  into this library the same way as `scan_i2c` would force `OneWire` onto every sketch using
+  `SensorNode`, not just ones with a 1-Wire bus -- unlike `Wire`/I2C, `OneWire` doesn't ship
+  with the ESP32 core, so this is a real added dependency, not a free one. (Worth noting
+  separately: `OneWire`'s current published release, 2.3.8, doesn't compile on ESP32-C6 at
+  all -- the fix is on GitHub `main` but not in a tagged release, so a sketch using it on C6
+  needs to install from GitHub directly rather than Library Manager.) The
+  trade-off of leaving unrecognized commands alone: a command nothing ever claims (a typo, or
+  one written for firmware that predates it) doesn't self-clear -- it sits in `pending_command`
+  until someone notices and clears it by hand. Acceptable since this mailbox is a manually-
+  triggered testing aid, not high-volume traffic.
 
-  **RTC ring buffer (added 2026-08-26)** -- `log()`'s actual buffering implementation,
-  the piece `reportEveryCycles` existed for since 2026-08-25 but nothing read yet. A
+  **RTC ring buffer** -- `log()`'s actual buffering implementation. A
   fixed-size ring (`RTCRingSlot slots[64]` -- `{uint32_t epoch; float values[16];}`, sized
   to the worst case regardless of what a given sketch actually reports) lives in an
   anonymous-namespace `RTC_DATA_ATTR` struct in `SensorNode.cpp`, alongside `head`/`tail`
@@ -242,12 +228,11 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   once the response confirms `"Data logged"`; a failed or skipped flush leaves `tail`
   alone, so the next flush attempt naturally resends the whole backlog combined with
   whatever's accumulated since, with no separate retry path. A `log()` call that pushes
-  but doesn't attempt a flush that wake now returns `true` (queued, not sent) rather than
-  the pre-buffering "server confirmed" meaning -- checked that no example sketch reads
-  `log()`'s return value before making that change (they all discard it: `node.log(...)`
-  as a bare statement in every `loop()`).
+  but doesn't attempt a flush that wake returns `true` (queued, not sent) rather than the
+  pre-buffering "server confirmed" meaning -- no example sketch reads `log()`'s return value
+  (they all discard it: `node.log(...)` as a bare statement in every `loop()`).
 
-  **Sleep -- not yet implemented (open design question as of 2026-08-26).** The ring
+  **Sleep -- not yet implemented.** The ring
   buffer above exists specifically to make this a drop-in later, but "add sleep" isn't
   one swap-in -- there's a real choice of *how much* to sleep, not yet resolved:
   (1) WiFi modem-sleep only (`WiFi.setSleep(true)`) -- radio naps between beacons, CPU
@@ -270,12 +255,9 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   the chip's boot-mode strapping pin *and* the board's onboard BOOT
   button -- holding it through a reset sends the chip into USB
   download/bootloader mode instead of running any application code at
-  all (confirmed 2026-08-16: silent serial output, no boot banner,
-  after Lars held BOOT thinking it was this feature's trigger). Per
-  Espressif's own ESP-IDF docs (verified directly -- a first search
-  wrongly suggested GPIO0 was also a strapping pin on this chip, which
-  is only true on classic ESP32, not C6/S3/C3), GPIO4/5/8/9/15 are the
-  ESP32-C6's only strapping pins. GPIO12/13 are USB D-/D+ (the same
+  all. Per Espressif's ESP-IDF docs, GPIO4/5/8/9/15 are the
+  ESP32-C6's only strapping pins (note: this is *not* the same set as classic ESP32, which
+  also treats GPIO0 as a strapping pin -- C6/S3/C3 don't). GPIO12/13 are USB D-/D+ (the same
   USB-JTAG connection used for flashing/serial), GPIO6/7/11/18-23 are
   tied to the Thing Plus's onboard Qwiic/battery-gauge/microSD/RGB LED,
   and the Qwiic Pocket Dev Board only breaks out GPIO2/3/4/5/16/17/18/19
@@ -311,7 +293,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   string work, no I/O -- but only actually resolves `serverHost_` via `WiFi.hostByName()` and
   caches the result in `serverIp_` once, re-resolving only on failure -- deliberately not every
   `log()` call, since `NetworkManager::hostByName()` doesn't take the TCPIP core lock lwIP
-  requires (`arduino-esp32` issue #10526, still unpatched as of core 3.3.11) and can hang or
+  requires (`arduino-esp32` issue #10526) and can hang or
   crash under load. If DNS starts failing/crashing again, fall back to hardcoding the resolved
   IP and passing `serverHost_` to `connect()` only for TLS SNI/the HTTP Host header.
 - **`HTTPClient` is deliberately not used.** `log()` writes a raw
@@ -321,10 +303,10 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   writing the request (constructing the object, `addHeader()`, etc.)
   was enough for the connection to get closed before a byte went out.
   Don't reintroduce `HTTPClient` here without retesting on hardware.
-- If a future round of connectivity symptoms looks like "first network
+- If a connectivity symptom looks like "first network
   operation after boot fails, then things half-work," check the
-  router/AP before chasing firmware-side theories -- that exact
-  pattern once turned out to be a dead router, not code.
+  router/AP before chasing firmware-side theories -- that pattern
+  can be a dead router, not code.
 
 ## TLS
 
@@ -332,20 +314,16 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 (`src/SensorNodeCertBundle.h`, via `WiFiClientSecure::setCACertBundle()`
 + `connect()` with a null `CA_cert` so it falls through to the bundle
 path -- see `ssl_client.cpp`'s `rootCABuff != NULL` / `useRootCABundle`
-branching if that ever needs re-verifying against a core update), not
-a single pinned cert or a generic trust store or `setInsecure()`. That
+branching if that ever needs re-verifying against a core update), rather than
+a single pinned cert (breaks the instant larsi.org's certificate provider changes) or a
+full public-CA-store bundle (~55KB of cert data plus ~71KB of extra linked code overflows
+this device's flash budget). That
 header has the full reasoning, the five CAs picked and why, and --
 important if flash pressure ever forces trimming the bundle back
 down -- the order to remove them in. Don't hand-edit the byte array
 there; regenerate it per that header's instructions.
 
-A single pinned cert (what this used to do) breaks the instant
-larsi.org's certificate provider changes; a full public-CA-store
-bundle was tried and ruled out by actually compiling it -- ~55KB of
-cert data plus ~71KB of extra linked code (mbedTLS's bundle search/
-verify path isn't linked at all for a single pinned cert) overflows
-this device's flash, which was already at 92% before any bundle. The
-curated 5 -- ISRG Root X1 (Let's Encrypt), GlobalSign Root R46,
+The curated 5 -- ISRG Root X1 (Let's Encrypt), GlobalSign Root R46,
 USERTrust RSA Certification Authority (Sectigo), Go Daddy Root
 Certificate Authority - G2 (current), DigiCert Global Root G2 --
 cover ~94% of the web by W3Techs' market-share survey at a cost of
