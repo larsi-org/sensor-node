@@ -311,7 +311,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 ## TLS
 
 `SensorNode.cpp` verifies against a curated 5-root CA bundle
-(`src/SensorNodeCertBundle.h`, via `WiFiClientSecure::setCACertBundle()`
+(`src/CertBundle.h`, via `WiFiClientSecure::setCACertBundle()`
 + `connect()` with a null `CA_cert` so it falls through to the bundle
 path -- see `ssl_client.cpp`'s `rootCABuff != NULL` / `useRootCABundle`
 branching if that ever needs re-verifying against a core update), rather than

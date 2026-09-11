@@ -254,7 +254,7 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
   library always connects over TLS on port 443 regardless of what's
   typed, and there's no port-override support.
 - TLS is verified against a curated 5-root CA bundle
-  (`src/SensorNodeCertBundle.h`), not a single pinned cert -- covers
+  (`src/CertBundle.h`), not a single pinned cert -- covers
   larsi.org's current provider (GoDaddy) plus the ones it would
   realistically end up on if that changes (Let's Encrypt, GlobalSign,
   Sectigo, DigiCert), picked from public CA market-share data. See

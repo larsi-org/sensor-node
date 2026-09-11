@@ -11,7 +11,7 @@
 #include <cstring>
 
 #include "SensorNodePortal.h"
-#include "SensorNodeCertBundle.h"
+#include "CertBundle.h"
 
 namespace {
 
