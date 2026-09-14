@@ -47,6 +47,22 @@ DNSServer dnsServer;
 WebServer server(80);
 bool saved = false;
 
+// larsi.org's real favicon.ico (318 bytes), base64-inlined as a data URI -- avoids a separate
+// /favicon.ico route and the flash cost of a PROGMEM byte array, and the browser never makes a
+// second request for it, so it also sidesteps the AP-mode portal's auto-favicon-fetch otherwise
+// bouncing off handleNotFound()'s redirect back to "/". Re-derive with
+// `base64 -w0 favicon.ico` if the site's icon ever changes. Shared by every sketch built against
+// this library, not copied per-example -- see cyd-station's CydPortal.cpp for the sibling copy
+// (a separate repo, not a library dependency of this one, so it carries its own).
+const char *kFaviconLink =
+    "<link rel=\"icon\" type=\"image/x-icon\" href=\"data:image/x-icon;base64,"
+    "AAABAAEAEBAQAAAABAAoAQAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAgAAAAAAAAAAAAAAAEAAA"
+    "ABAAAAD///8A//8AAP8A/wD/AAAAAP//AAD/AAAAAP8AgICAAMDAwACAgAAAgACAAIAAAAAAgIAA"
+    "AIAAAAAAgAAAAAAA//////////////////////////////////d3d3//////9///d//////3//"
+    "9///////f//3/3////9///f/9////3d3d//3////9///f/f/////////9//////3///3/////"
+    "/93d3//////////////////////////////////8AHwAAf88AAH/XAABgWwAAbx0AAG9eAABvT"
+    "gAAb1YAAGBWAAB3lgAAABYAAL3mAADeBgAA7/oAAPf8AAD4AAAA\">";
+
 // Set once, at the top of runSensorNodeSetupPortal(); only actually persisted (see
 // handleSave()) once the user submits, not just because the portal was entered -- see
 // SensorNodePortal.h.
@@ -213,6 +229,7 @@ String buildFormPage() {
   String page;
   page += "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">";
   page += "<title>Sensor Node Setup</title>";
+  page += kFaviconLink;
   page += "<style>body{font-family:sans-serif;max-width:420px;margin:2em auto;padding:0 1em}";
   page += "label{display:block;margin-top:1em;font-weight:bold}";
   page += "input,select{width:100%;padding:.4em;box-sizing:border-box;font-size:1em}";
