@@ -326,6 +326,23 @@ bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::
     decimalPlacesById[id] = channels[i].decimalPlaces;
   }
 
+  // A cycle whose only reading is the battery (channel 15, reserved sitewide for it) logs nothing
+  // at all: a node whose real sensors are all dead (e.g. a disconnected 1-Wire bus) must go
+  // silent on the server so staleness checks notice, instead of looking alive on battery alone.
+  // The same rule makes an all-NAN cycle log nothing, rather than an empty row that would keep
+  // device.last_epoch fresh.
+  bool anyNonBatteryReading = false;
+  for (uint8_t id = 0; id < kMaxChannels - 1; id++) {
+    if (!isnan(byId[id])) {
+      anyNonBatteryReading = true;
+      break;
+    }
+  }
+  if (!anyNonBatteryReading) {
+    Serial.println("[SensorNode] No sensor readings this cycle (battery alone doesn't count) -- not logging.");
+    return false;
+  }
+
   // Buffer first, unconditionally -- every wake's reading is durably queued in the RTC ring
   // regardless of whether this wake also attempts a flush below, so a failed/skipped flush
   // never loses a reading, just defers it.

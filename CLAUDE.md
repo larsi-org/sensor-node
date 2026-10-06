@@ -67,7 +67,11 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   buffering it (see the RTC ring buffer paragraph below) -- that's
   what lets a sketch skip hand-padding `NAN`s up to a gap like channel
   15 (`examples/BME280Node`: `node.log(kChannels, {ch0, ch1, ch2, ch3,
-  ch15})` -- no channels 4-14 to write out by hand). A flush always
+  ch15})` -- no channels 4-14 to write out by hand). A call where every
+  id below 15 is NAN returns before buffering anything (battery alone
+  doesn't count as a reading; an all-NAN call likewise), so a node with
+  dead sensors goes stale on the server instead of staying "alive" via
+  channel 15. A flush always
   serializes all 16 ids per queued entry, not just up to the highest id used that call -- the
   log endpoint's per-entry parsing already treats a trailing empty field the same as a missing
   one, so this is wire-compatible, just a few bytes larger. `values` can also

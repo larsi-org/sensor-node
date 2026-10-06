@@ -163,6 +163,10 @@ Library" libraries from the Library Manager.
   `node.log(kChannels, {ch0, ch1})` to skip channels 2+ some call). A
   `NAN` value is left out of the request entirely, which the log
   endpoint treats as "skip this channel" rather than logging a zero.
+  A call where every channel except the battery (channel 15) is `NAN`
+  logs nothing at all and returns false, so a node whose sensors have all
+  failed goes silent on the server instead of looking alive on battery
+  readings alone.
   Every call queues its reading in a fixed 64-entry RTC-memory ring
   buffer first, unconditionally -- so a call never loses data even if
   this wake doesn't also flush, or the flush fails. Only every
