@@ -25,9 +25,10 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   location field -- `deviceName` (free text) is what distinguishes multiple devices at one
   station.
 - `SensorNodePortal` (`src/SensorNodePortal.*`) -- open AP + captive
-  portal (`WebServer` + `DNSServer` catch-all) used only while none of
-  the known networks connect. `runSensorNodeSetupPortal()` blocks
-  forever and restarts the device on successful submit. `buildFormPage()`
+  portal (`WebServer` + `DNSServer` catch-all). `runSensorNodeSetupPortal()` blocks
+  forever and restarts the device on successful submit; it runs on first setup (nothing saved), for
+  a firmware-version bump and from the button. While saved networks are unreachable the portal
+  runs in the background instead (see Reconnect below). `buildFormPage()`
   pre-fills device name/id/API key/log frequency/report frequency/server URL from the
   existing config (loaded fresh each render), since the common reason
   the portal is running at all is that the node moved somewhere new --
@@ -50,8 +51,8 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   name -- the password field is never pre-filled -- would
   silently erase a working Wi-Fi password.
 - `SensorNode` (`src/SensorNode.*`) -- the class sketches use.
-  `begin()` tries each known network in turn, falls back to the portal
-  if none connect, then resolves the server and syncs the clock via
+  `begin()` tries each known network in turn (the portal only if nothing is saved; otherwise it
+  returns unconnected and `idle()` keeps retrying), then resolves the server and syncs the clock via
   NTP. `log()` sends `device` and `data` as separate form fields per the
   wire protocol (see `https://larsi.org/sensors/api.php` in the
   main site repo) and writes it as a raw HTTP/1.1 request directly to a
@@ -301,11 +302,9 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   crash under load. If DNS starts failing/crashing again, fall back to hardcoding the resolved
   IP and passing `serverHost_` to `connect()` only for TLS SNI/the HTTP Host header.
 - **Reconnect and the background portal** (`begin()`, `service()`, `idle()` in `SensorNode.cpp`;
-  `start/service/stopSensorNodePortal()` in `SensorNodePortal.cpp`). Added 2026-11-05 after every
-  batcave node went silent ~10/22: before this, `begin()` connected once and `log()` just returned
-  false whenever Wi-Fi was down, with nothing ever calling `WiFi.begin()` again, and a boot with the
-  router down blocked forever in the setup portal. Now: `begin()` runs the portal blocking only
-  when nothing is saved; with saved networks that all fail it returns unconnected. `service()` owns
+  `start/service/stopSensorNodePortal()` in `SensorNodePortal.cpp`). `begin()` runs the portal
+  blocking only when nothing is saved; with saved networks that all fail it returns unconnected,
+  and `log()` returns false while Wi-Fi is down (readings queue in the ring). `service()` owns
   every reconnect (auto-reconnect is switched off so two never race): non-blocking attempts per
   saved network (`connectTimeoutMs` each), then a pause that doubles 5 s -> 5 min with 25% jitter.
   After 60 s offline it starts the portal in the background (AP_STA, so station retries go on);

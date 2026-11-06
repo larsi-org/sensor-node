@@ -22,7 +22,8 @@ Up to `SensorNodeConfig::kMaxNetworks` (3) networks are remembered,
 most-recently-added first -- a node that moves between a handful of
 locations (e.g. two homes) reconnects immediately without
 reprovisioning every time it moves back. `begin()` tries each in turn;
-only once none of them connect does the portal come up, pre-filled
+if none connect, the device keeps retrying them in the background and, after a minute,
+brings the setup portal up alongside, pre-filled
 with the existing device name/id/API key (but not the
 network password -- see Notes) so moving to a new location only means
 adding one new network.
@@ -68,14 +69,14 @@ const std::vector<SensorNodeChannel> kChannels = {{0, "BME280", "Temperature", "
 
 void setup() {
   Serial.begin(115200);
-  node.begin();            // connects, or runs the setup portal if it can't
+  node.begin();            // connects; with nothing saved, runs the setup portal
   if (node.needsProvisioning()) node.provision(kChannels);  // only after a portal save
 }
 
 void loop() {
   float temperatureC = readTemperature();
   node.log(kChannels, {temperatureC});
-  delay(node.config().logIntervalMinutes * 60UL * 1000);  // set via the portal
+  node.idle(node.config().logIntervalMinutes * 60UL * 1000);  // not delay(): keeps Wi-Fi reconnecting
 }
 ```
 
@@ -89,9 +90,24 @@ Library" libraries from the Library Manager.
 ## API
 
 - `void begin(unsigned long connectTimeoutMs = 15000)` -- loads saved
-  settings and connects. If nothing is saved, or the connection times
-  out, this runs the setup portal instead and never returns; the
-  device restarts once the portal is submitted.
+  settings and connects. If nothing is saved, this runs the setup
+  portal and never returns; the device restarts once the portal is
+  submitted. If networks are saved but none connect, it returns
+  unconnected and `idle()` carries on (below).
+- `void idle(unsigned long ms)` -- use instead of `delay()` at the end of
+  `loop()`. Waits like `delay()` in short ticks that notice a dropped
+  connection, retry the saved networks with backoff (5 s doubling to
+  5 min), open the setup portal in the background after a minute
+  offline, close it after reconnecting, and restart the device after
+  30 minutes offline. Readings made meanwhile queue in the ring buffer.
+- `bool connected() const`, `void waitForWifi()` -- connection state, and
+  a blocking wait (same reconnect logic) for a `setup()` that needs the
+  network.
+- `SensorNodeStatus status() const` and
+  `setSensorNodeStatusCallback(fn)` (`SensorNodeStatus.h`) -- connected,
+  portal, IP (the access point's while the portal is up), signal and
+  time offline, for a display; the examples draw it on the OLED's last
+  row. Register the callback first thing in `setup()`.
 - `void resetConfig()` -- erases saved settings. Call before `begin()`
   to force the setup portal on the next call (e.g. gate it behind a
   button held at boot).
@@ -238,7 +254,7 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
 
 - This library doesn't sleep between `loop()` cycles yet -- `log()`'s RTC ring buffer
   (above) exists specifically to make that a drop-in later, but no sketch calls any sleep
-  API today; `delay(node.config().logIntervalMinutes * 60UL * 1000)` is still what every
+  API today; `node.idle(node.config().logIntervalMinutes * 60UL * 1000)` is what every
   example uses. See `CLAUDE.md`'s "Sleep" note for the open modem-sleep/light-sleep/
   deep-sleep tradeoff this hasn't settled on yet.
 - A sketch can implement its own pending commands on top of the same mailbox
