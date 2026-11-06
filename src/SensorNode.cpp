@@ -56,6 +56,26 @@ void ensureRingInitialized() {
   rtcRing.tail = 0;
 }
 
+// Any epoch below this means the clock was never synced (it runs from ~0 at boot until NTP
+// answers): readings queued in that state carry seconds-since-boot, and syncTime() below
+// shifts them onto the real timeline once the clock is set. Also gates TLS, whose certificate
+// check needs a real date.
+const time_t kValidEpoch = 1600000000;  // Sept 2020
+
+bool clockIsSet() { return time(nullptr) > kValidEpoch; }
+
+// Reconnect policy (SensorNode::service()). A failed round over every saved network is
+// followed by a pause that doubles from kBackoffStartMs to kBackoffMaxMs (plus up to 25%
+// jitter, so several nodes on one router do not all retry in lockstep after a power cut).
+// The setup portal comes up in the background after kPortalAfterMs without a connection; a
+// device that has been offline kRestartAfterMs (and has nobody on its portal) restarts, which
+// clears a wedged radio and keeps the RTC ring buffer.
+const unsigned long kBackoffStartMs = 5000;
+const unsigned long kBackoffMaxMs = 5UL * 60 * 1000;
+const unsigned long kPortalAfterMs = 60UL * 1000;
+const unsigned long kRestartAfterMs = 30UL * 60 * 1000;
+const unsigned long kClockRetryMs = 60UL * 1000;
+
 // Sweeps every I2C address on whatever Wire is already using (defensive Wire.begin() -- this
 // may run on a sketch that never touched Wire itself, e.g. BasicNode) and returns a comma-joined
 // list of hex addresses that ACKed, or "none". Bench-testing aid only (see
@@ -208,45 +228,202 @@ bool ntpQuery(const char *serverIp, unsigned long timeoutMs) {
 // device clock, which boots near the epoch -- without this, every TLS
 // connection fails since the cert looks "not yet valid" until synced.
 void syncTime() {
+  time_t before = time(nullptr);
   bool synced = ntpQuery("162.159.200.1", 5000) || ntpQuery("216.239.35.0", 5000);
-  Serial.printf("[SensorNode] Time sync %s (epoch %ld)\n", synced ? "OK" : "FAILED", (long)time(nullptr));
+  time_t after = time(nullptr);
+  Serial.printf("[SensorNode] Time sync %s (epoch %ld)\n", synced ? "OK" : "FAILED", (long)after);
+
+  if (synced && before < kValidEpoch && after >= kValidEpoch) {
+    // Readings queued while the clock was unset hold seconds-since-boot: move them onto the
+    // real timeline by the same jump the clock just made.
+    ensureRingInitialized();
+    uint32_t shift = (uint32_t)(after - before);
+    for (uint32_t i = rtcRing.tail; i != rtcRing.head; i++) {
+      RTCRingSlot &entry = rtcRing.slots[i & (kRingCapacity - 1)];
+      if (entry.epoch < (uint32_t)kValidEpoch) entry.epoch += shift;
+    }
+  }
 }
 
 }  // namespace
 
 void SensorNode::begin(unsigned long connectTimeoutMs) {
-  bool connected = loadSensorNodeConfig(config_);
+  connectTimeoutMs_ = connectTimeoutMs;
 
-  if (connected) {
-    String hostname = sanitizeHostname(config_.deviceName);
-    if (hostname.length() > 0) {
-      WiFi.setHostname(hostname.c_str());
-    }
-    WiFi.mode(WIFI_STA);
-
-    connected = false;
-    for (uint8_t i = 0; i < SensorNodeConfig::kMaxNetworks && !connected; i++) {
-      if (config_.ssids[i].length() == 0) continue;
-
-      Serial.printf("[SensorNode] Connecting to \"%s\"...\n", config_.ssids[i].c_str());
-      WiFi.begin(config_.ssids[i].c_str(), config_.passwords[i].c_str());
-      unsigned long start = millis();
-      while (WiFi.status() != WL_CONNECTED && millis() - start < connectTimeoutMs) {
-        delay(250);
-      }
-      connected = (WiFi.status() == WL_CONNECTED);
-      if (!connected) WiFi.disconnect();
-    }
-  }
-
-  if (!connected) {
-    Serial.println("[SensorNode] Not connected -- starting setup portal.");
+  if (!loadSensorNodeConfig(config_)) {
+    // Nothing saved yet (first boot, or a wipe): there is nothing to retry, so the portal is
+    // the only way forward.
+    Serial.println("[SensorNode] No saved settings -- starting setup portal.");
     runSensorNodeSetupPortal();  // never returns; device restarts on success
   }
 
+  String hostname = sanitizeHostname(config_.deviceName);
+  if (hostname.length() > 0) {
+    WiFi.setHostname(hostname.c_str());
+  }
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(false);  // service() owns every reconnect, so two never race
+
+  bool connected = false;
+  for (uint8_t i = 0; i < SensorNodeConfig::kMaxNetworks && !connected; i++) {
+    if (config_.ssids[i].length() == 0) continue;
+
+    Serial.printf("[SensorNode] Connecting to \"%s\"...\n", config_.ssids[i].c_str());
+    WiFi.begin(config_.ssids[i].c_str(), config_.passwords[i].c_str());
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < connectTimeoutMs) {
+      delay(250);
+    }
+    connected = (WiFi.status() == WL_CONNECTED);
+    if (!connected) WiFi.disconnect();
+  }
+
+  if (connected) {
+    onConnected();
+  } else {
+    // Saved networks exist, so this is an outage (or a moved device) rather than a fresh one:
+    // carry on. service() keeps retrying with backoff and opens the portal in the background
+    // if the outage lasts (see SensorNode.h).
+    Serial.println("[SensorNode] Not connected -- will keep retrying; setup portal opens if this lasts.");
+    downSince_ = millis();
+  }
+  publishStatus();
+}
+
+void SensorNode::onConnected() {
+  wasConnected_ = true;
+  downSince_ = 0;
+  attemptActive_ = false;
+  attemptIndex_ = 0;
+  backoffMs_ = kBackoffStartMs;
+  roundPause_ = false;
   Serial.printf("[SensorNode] Connected, IP %s\n", WiFi.localIP().toString().c_str());
   resolveServerIp();  // best-effort here; log() retries later if this fails
   syncTime();
+  lastClockTry_ = millis();
+}
+
+bool SensorNode::connected() const { return WiFi.status() == WL_CONNECTED; }
+
+SensorNodeStatus SensorNode::status() const {
+  SensorNodeStatus st;
+  st.connected = WiFi.status() == WL_CONNECTED;
+  st.portal = sensorNodePortalActive();
+  if (st.portal) {
+    st.ip = WiFi.softAPIP();
+  } else if (st.connected) {
+    st.ip = WiFi.localIP();
+  }
+  if (st.connected) {
+    st.rssi = (int8_t)WiFi.RSSI();
+  } else if (downSince_ != 0) {
+    st.downSeconds = (millis() - downSince_) / 1000;
+  }
+  return st;
+}
+
+void SensorNode::publishStatus() { publishSensorNodeStatus(status()); }
+
+// Moves attemptIndex_ forward to the next saved network at or after it; false once past the
+// last one (the round is over).
+bool SensorNode::pickNetwork() {
+  while (attemptIndex_ < SensorNodeConfig::kMaxNetworks) {
+    if (config_.ssids[attemptIndex_].length() > 0) return true;
+    attemptIndex_++;
+  }
+  return false;
+}
+
+void SensorNode::service() {
+  unsigned long now = millis();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!wasConnected_) {
+      Serial.printf("[SensorNode] Wi-Fi back after %lu s.\n", downSince_ ? (now - downSince_) / 1000 : 0UL);
+      onConnected();
+    } else if (!clockIsSet() && now - lastClockTry_ >= kClockRetryMs) {
+      lastClockTry_ = now;
+      syncTime();
+    }
+    // Close the background portal once online, but not under someone's hands.
+    if (sensorNodePortalActive() && !sensorNodePortalBusy()) stopSensorNodePortal();
+    serviceSensorNodePortal();
+    publishStatus();
+    return;
+  }
+
+  // Not connected.
+  if (wasConnected_) {
+    wasConnected_ = false;
+    downSince_ = now;
+    attemptActive_ = false;
+    attemptIndex_ = 0;
+    roundPause_ = false;
+    backoffMs_ = kBackoffStartMs;
+    Serial.println("[SensorNode] Wi-Fi lost -- reconnecting.");
+  }
+  if (downSince_ == 0) downSince_ = now;
+
+  if (now - downSince_ >= kRestartAfterMs && !sensorNodePortalBusy()) {
+    Serial.println("[SensorNode] Offline too long -- restarting.");
+    delay(100);
+    ESP.restart();
+  }
+
+  // Reconnect attempts pause while someone is using the portal: a scan or association attempt
+  // would drop their page.
+  if (!sensorNodePortalBusy()) {
+    if (attemptActive_) {
+      if (now - attemptStart_ >= connectTimeoutMs_) {
+        WiFi.disconnect();
+        attemptActive_ = false;
+        attemptIndex_++;
+      }
+    }
+    if (!attemptActive_) {
+      if (roundPause_ && now - roundEnd_ < pauseMs_) {
+        // still backing off
+      } else {
+        roundPause_ = false;
+        if (pickNetwork()) {
+          Serial.printf("[SensorNode] Reconnecting to \"%s\"...\n", config_.ssids[attemptIndex_].c_str());
+          WiFi.begin(config_.ssids[attemptIndex_].c_str(), config_.passwords[attemptIndex_].c_str());
+          attemptActive_ = true;
+          attemptStart_ = now;
+        } else {
+          // Every saved network failed this round: back off before the next one.
+          attemptIndex_ = 0;
+          roundPause_ = true;
+          roundEnd_ = now;
+          pauseMs_ = backoffMs_ + random(backoffMs_ / 4 + 1);
+          backoffMs_ = min(backoffMs_ * 2, kBackoffMaxMs);
+        }
+      }
+    }
+  }
+
+  if (!sensorNodePortalActive() && now - downSince_ >= kPortalAfterMs) {
+    Serial.println("[SensorNode] Still offline -- opening setup portal in the background.");
+    startSensorNodePortal();
+  }
+  serviceSensorNodePortal();
+  publishStatus();
+}
+
+void SensorNode::idle(unsigned long ms) {
+  unsigned long start = millis();
+  while (true) {
+    service();
+    unsigned long elapsed = millis() - start;
+    if (elapsed >= ms) break;
+    unsigned long tick = sensorNodePortalActive() ? 5 : 200;  // the portal wants quick polls
+    delay(min(ms - elapsed, tick));
+  }
+}
+
+void SensorNode::waitForWifi() {
+  while (WiFi.status() != WL_CONNECTED) idle(1000);
+  service();  // runs onConnected() if the connection came in between ticks
 }
 
 void SensorNode::resetConfig() { clearSensorNodeConfig(); }
@@ -361,7 +538,9 @@ bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::
   // identical to this method's behavior before buffering existed.
   if (rtcRing.head % config_.reportEveryCycles != 0) return true;  // queued, nothing to send yet
 
+  service();  // a flush wake is a good moment to notice a drop (or a recovery)
   if (WiFi.status() != WL_CONNECTED) return false;  // still queued -- next flush wake retries
+  if (!clockIsSet()) return false;  // TLS and the readings' offsets both need the real time
   if (!resolveServerIp()) return false;
 
   uint32_t now = (uint32_t)time(nullptr);

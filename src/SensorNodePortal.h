@@ -17,6 +17,20 @@ String macSuffix();
 // handleSave() (reject before saving) and SensorNode::resolveServerIp() (parse before use).
 bool parseServerUrl(const String &url, String &host, String &basePath);
 
+// The portal in pieces, for running it in the background while the main loop goes on (see
+// SensorNode::idle()): start brings up the access point (AP_STA, so station-side connection
+// attempts can continue), DNS and web server and returns; service does one pass of both
+// servers (and restarts the device a second after a successful save); stop tears it all down
+// and returns to plain station mode. Safe to call start/stop repeatedly.
+// sensorNodePortalBusy() is true while someone is evidently using it -- a phone on the AP
+// that joined or sent a request within the last 5 minutes, or a save about to restart -- so
+// the caller doesn't pull the portal out from under a half-filled form.
+void startSensorNodePortal(uint32_t pendingFirmwareVersion = 0);
+void serviceSensorNodePortal();
+void stopSensorNodePortal();
+bool sensorNodePortalActive();
+bool sensorNodePortalBusy();
+
 // Blocks forever: brings up an open Wi-Fi access point plus a captive
 // config portal (network picker, password, device name, device id,
 // API key, log frequency), saves whatever the user submits, then

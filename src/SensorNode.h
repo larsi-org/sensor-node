@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "SensorNodeConfig.h"
+#include "SensorNodeStatus.h"
 
 // One channel's identity, shared by provision() and log() -- id is the 0-15 offset within
 // this device (channel deviceId*16 + id is what the server actually addresses), sensor is the
@@ -32,10 +33,20 @@ class SensorNode {
   // Loads saved settings and tries each known network in turn
   // (SensorNodeConfig::kMaxNetworks, most-recently-added first) --
   // connectTimeoutMs applies per network, so the worst-case time
-  // before falling back is that times the number of known networks.
-  // If nothing is saved, or none connect, this instead runs the AP
-  // setup portal and never returns -- the device restarts once the
-  // user submits valid settings, then reconnects on the next boot.
+  // before returning is that times the number of known networks.
+  // If nothing is saved at all, this runs the AP setup portal and
+  // never returns -- the device restarts once the user submits valid
+  // settings, then reconnects on the next boot.
+  //
+  // If networks are saved but none connect (the router is down, or the device was moved),
+  // this RETURNS, unconnected. The device keeps working: log() queues readings in the ring
+  // buffer, and idle() (below) keeps retrying the saved networks with exponential backoff
+  // (5 s doubling to 5 min). After a minute without a connection idle() also opens the setup
+  // portal in the background, so a moved device can be pointed at its new network without
+  // ever having to guess whether it moved or the router is just down; the portal closes by
+  // itself once a connection is made (unless someone is using it), and after 30 minutes
+  // offline the device restarts (the ring buffer survives that). A sketch that needs the
+  // network before it can continue (fetchConfig() in setup()) calls waitForWifi().
   void begin(unsigned long connectTimeoutMs = 15000);
 
   // Erases saved settings so the next begin() call falls back to the
@@ -116,6 +127,27 @@ class SensorNode {
   // applyPendingCommand()/checkPendingCommand() to act on -- log() itself never acts on it.
   bool log(const std::vector<SensorNodeChannel> &channels, const std::vector<float> &values);
 
+  // Use instead of delay() at the end of loop() (and for any other long wait): waits ms
+  // milliseconds like delay(), but in short ticks that keep the network healthy -- it notices a
+  // dropped Wi-Fi connection, retries with backoff, runs the background setup portal while
+  // offline and closes it again after reconnecting. A plain delay() works while the network
+  // stays up, but never reconnects after a drop.
+  void idle(unsigned long ms);
+
+  // True while associated with a Wi-Fi network.
+  bool connected() const;
+
+  // Current network state for a display, and a callback (see SensorNodeStatus.h) that fires
+  // whenever it changes in a way worth redrawing -- from begin(), log() and idle(), and from
+  // the blocking setup portals too if registered before them. Register
+  // setSensorNodeStatusCallback() first thing in setup(); status() is for drawing the initial
+  // state.
+  SensorNodeStatus status() const;
+
+  // Blocks (servicing the same reconnect/portal logic as idle()) until connected. For a
+  // sketch whose setup() cannot go on offline.
+  void waitForWifi();
+
   // Acts on a command log() persisted on this or an earlier call, if it's one this method
   // owns. "scan_i2c" runs immediately, right here (no restart needed -- see scanI2CBus()) and
   // clears the flag itself; "open_portal" restarts the device instead, without clearing the
@@ -164,7 +196,24 @@ class SensorNode {
   // the two derived fields next to the resolution that depends on them).
   bool resolveServerIp();
 
+  void onConnected();
+  void publishStatus();
+  void service();
+  bool pickNetwork();
+
   SensorNodeConfig config_;
+  // Reconnect state -- see service() in SensorNode.cpp.
+  unsigned long connectTimeoutMs_ = 15000;
+  bool wasConnected_ = false;
+  unsigned long downSince_ = 0;  // 0 = not (yet) known to be down
+  bool attemptActive_ = false;
+  unsigned long attemptStart_ = 0;
+  uint8_t attemptIndex_ = 0;  // which saved network the current/next attempt uses
+  bool roundPause_ = false;   // backing off after a full round of failures
+  unsigned long roundEnd_ = 0;
+  unsigned long pauseMs_ = 0;
+  unsigned long backoffMs_ = 5000;
+  unsigned long lastClockTry_ = 0;
   IPAddress serverIp_;
   String serverHost_;
   String serverBasePath_ = "/";  // e.g. "/sensors/" -- log()/provision() append "log"/"provision"

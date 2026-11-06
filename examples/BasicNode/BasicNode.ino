@@ -60,7 +60,8 @@ void loop() {
   float temperatureC = 21.5;  // TODO: replace with a real sensor read
   float humidityPct = NAN;    // NAN skips this channel entirely
 
+  if (node.needsProvisioning()) node.provision(kChannels);  // retried here too: setup() may have been offline
   node.log(kChannels, {temperatureC, humidityPct});
   node.applyPendingCommand();
-  delay(node.config().logIntervalMinutes * 60UL * 1000);
+  node.idle(node.config().logIntervalMinutes * 60UL * 1000);  // not delay(): keeps Wi-Fi reconnecting
 }

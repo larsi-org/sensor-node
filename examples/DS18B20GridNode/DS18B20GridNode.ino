@@ -1,8 +1,8 @@
 // Generic DS18B20 grid node: up to 4 columns (A/B/C/D), each its own physical 1-Wire line on one
-// of the DS2482-800's 8 channels, up to 7 probes (vertical slices) per column -- channel budget
+// of the DS2482-800's 8 channels, up to 6 probes (vertical slices) per column -- channel budget
 // is 15 total across all columns (server channel ids 0-14) plus channel 15 for the onboard
-// MAX17048 battery, so a single column can use all 7 while the other three sit unused, or all
-// four can be populated as long as they don't collectively exceed 15 (e.g. 5/5/5/0, 7/7/1/0, or
+// MAX17048 battery, so a single column can use all 6 while the other three sit unused, or all
+// four can be populated as long as they don't collectively exceed 15 (e.g. 5/5/5/0, 6/6/3/0, or
 // 4/4/4/3 -- any split works, not just an even one).
 //
 // Requires the "Adafruit DS248x" library (Arduino Library Manager) for the DS2482-800/DS2484
@@ -31,8 +31,9 @@
 // = D -- a file with fewer than 4 lines just leaves the rest unconfigured), each a comma-
 // separated list of that column's probes' 64-bit ROM codes as 16 hex chars (no "0x", no
 // separators within one ID -- e.g. "284A5CD703000073"), top-to-bottom/first-to-last. A column
-// can list 0-7 IDs (kMaxProbesPerColumn); the columns don't all need the same count -- an
-// asymmetric grid (e.g. 7 on A, 3 on B, nothing on C or D) is exactly as valid as a uniform one,
+// can list 0-6 IDs (kMaxProbesPerColumn, so the display's title row plus six probe rows fills
+// the 8-row OLED with the bottom row left free for a status line); the columns don't all need the same count -- an
+// asymmetric grid (e.g. 6 on A, 3 on B, nothing on C or D) is exactly as valid as a uniform one,
 // which is the whole reason this is free-form CSV-per-line rather than a fixed "columns,rows"
 // header. The only other limit is the 15-channel budget shared across every column combined
 // (see the top comment) -- parsing stops accepting new IDs once that's hit, wherever in the
@@ -67,7 +68,7 @@ Adafruit_DS248x bridge;
 // enforces (see the file header comment); columnCount/probeCountPerColumn are this boot's
 // actual parsed shape, which can be smaller in every dimension.
 const uint8_t kMaxColumns = 4;
-const uint8_t kMaxProbesPerColumn = 7;
+const uint8_t kMaxProbesPerColumn = 6;
 const uint8_t kMaxTotalProbes = 15;  // channel ids 0-14; 15 is always the battery
 const uint8_t kBridgeChannel[kMaxColumns] = {0, 1, 2, 3};
 
@@ -97,13 +98,13 @@ bool oledPresent = false;
 String oledTitle;  // deviceName, else a hardcoded fallback -- set in setup()
 
 // Row 0: title + battery icon (kTitleWidth/kBatteryIconWidth, same layout as BME280Node.ino).
-// Rows 1-7: one vertical slice per row, but only ever kDisplayColumns (2) wide on screen at a
+// Rows 1-6: one vertical slice per row, but only ever kDisplayColumns (2) wide on screen at a
 // time -- there's no room left for a legible 3-or-4-wide row once each column carries a label
 // (see below). A grid with more than kDisplayColumns columns (3- or 4-column, C/D configured)
 // pages between them instead of dropping the extras -- see loop()'s paging block, drawGridPage()
 // and drawTitleAndBattery(). Each shown column is a fixed kColumnFieldWidth (10) chars: a
-// kLabelWidth (4) probe-position label ("A1: ".."D7: " -- column letter + 1-digit probe
-// number, always 1 digit since kMaxProbesPerColumn is 7) followed by the same 6-char value
+// kLabelWidth (4) probe-position label ("A1: ".."D6: " -- column letter + 1-digit probe
+// number, always 1 digit since kMaxProbesPerColumn is 6) followed by the same 6-char value
 // field as before (kValueFieldWidth, unchanged -- see formatValue()), joined by a single "|"
 // between the two columns on a page (not after the last one) -- e.g. "A1: 28.3C|B1:-10.5C",
 // 10 + 1 + 10 = 21 characters, exactly kTitleWidth/the screen's usable width. A shorter column
@@ -135,8 +136,8 @@ String formatValue(float value) {
   return String(buf);
 }
 
-// Formats a probe's on-screen position label, e.g. "A1: " / "B7: " -- always kLabelWidth (4)
-// chars since row is 0-based and kMaxProbesPerColumn (7) keeps row + 1 a single digit.
+// Formats a probe's on-screen position label, e.g. "A1: " / "B6: " -- always kLabelWidth (4)
+// chars since row is 0-based and kMaxProbesPerColumn (6) keeps row + 1 a single digit.
 String formatProbeLabel(uint8_t col, uint8_t row) {
   char buf[kLabelWidth + 1];
   snprintf(buf, sizeof(buf), "%c%u: ", (char)('A' + col), row + 1);
@@ -303,6 +304,76 @@ void drawTitleAndBattery(float soc) {
   }
 }
 
+// Bottom row (y 56-63) of the OLED: the address (at most 15 characters, 6 px each), a 3-character
+// note at x 90 ("AP" while the setup portal is up, the time offline otherwise) and a 17 x 7
+// Wi-Fi icon at x 110, crossed out when there is no connection. Fed by the library through
+// setSensorNodeStatusCallback() below; the same duplicated-by-design copy in every
+// OLED-equipped example, like the battery icon. The library only reports; what to draw is this
+// sketch's business.
+const int16_t kStatusY = 56;
+const int16_t kStatusNoteX = 90;
+const int16_t kWifiIconX = 110;
+SensorNodeStatus oledStatus;  // last status the library pushed
+
+// The icon, one string per row. A digit is the lowest signal level (1 weak .. 3 strong) at which
+// that pixel is drawn, so one picture serves all three levels. Offline draws level 3 plus a slash.
+const char *const kWifiIcon[7] = {
+    "....333333333....",
+    "..33.........33..",
+    ".3...2222222...3.",
+    "3..22.......22..3",
+    "..2...11111...2..",
+    ".....1.....1.....",
+    ".......111.......",
+};
+
+void drawWifiIcon(int16_t x, int16_t y, uint8_t level) {
+  uint8_t drawLevel = level == 0 ? 3 : level;
+  for (uint8_t row = 0; row < 7; row++) {
+    for (uint8_t col = 0; col < 17; col++) {
+      char c = kWifiIcon[row][col];
+      if (c != '.' && c - '0' <= drawLevel) oled.drawPixel(x + col, y + row, SH110X_WHITE);
+    }
+  }
+  if (level == 0) {
+    // Slash from top left to bottom right, 2 px wide with a 1 px gap cleared on both sides.
+    for (uint8_t row = 0; row < 7; row++) {
+      int16_t c = 2 + 2 * row;
+      oled.drawPixel(x + c - 1, y + row, SH110X_BLACK);
+      if (x + c + 2 < x + 17) oled.drawPixel(x + c + 2, y + row, SH110X_BLACK);
+      oled.drawPixel(x + c, y + row, SH110X_WHITE);
+      oled.drawPixel(x + c + 1, y + row, SH110X_WHITE);
+    }
+  }
+}
+
+// Draws the bottom row into the frame buffer (no oled.display()) -- called after every redraw
+// that clears the screen, and by onStatus() when the state changes.
+void paintStatus() {
+  const SensorNodeStatus &s = oledStatus;
+  oled.fillRect(0, kStatusY, kScreenWidth, 8, SH110X_BLACK);
+  oled.setCursor(0, kStatusY);
+  oled.print((s.portal || s.connected) ? s.ip.toString() : String("no Wi-Fi"));
+  char note[8] = "";
+  if (s.portal) {
+    strcpy(note, " AP");
+  } else if (!s.connected) {
+    if (s.downSeconds < 60) snprintf(note, sizeof(note), "%lus", (unsigned long)s.downSeconds);
+    else if (s.downSeconds < 3600) snprintf(note, sizeof(note), "%lum", (unsigned long)(s.downSeconds / 60));
+    else snprintf(note, sizeof(note), "%luh", (unsigned long)min<uint32_t>(s.downSeconds / 3600, 99));
+  }
+  oled.setCursor(kStatusNoteX, kStatusY);
+  oled.print(note);
+  drawWifiIcon(kWifiIconX, kStatusY, s.level());
+}
+
+void onStatus(const SensorNodeStatus &s) {
+  oledStatus = s;
+  if (!oledPresent) return;
+  paintStatus();
+  oled.display();
+}
+
 // Draws one page's worth of columns (kDisplayColumns wide, starting at startCol) below the
 // title bar -- startCol 0 is A|B, kDisplayColumns (2) is C|D (or just C, on a 3-column grid).
 // See the kTitleWidth-area comment above for the per-column "A1: 28.3C" label+value layout.
@@ -331,6 +402,7 @@ void drawGridPage(const float reading[kMaxColumns][kMaxProbesPerColumn], uint8_t
 void renderPage(const float reading[kMaxColumns][kMaxProbesPerColumn], float soc, uint8_t startCol) {
   drawTitleAndBattery(soc);
   drawGridPage(reading, startCol);
+  paintStatus();
   oled.display();
 }
 
@@ -341,13 +413,37 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
+  // Display first, so even the blocking setup portals (firmware-version change, button hold) can
+  // show their address through the status callback. The title comes straight from NVS here:
+  // node.config() is only filled in by begin().
+  Wire.begin();
+  {
+    SensorNodeConfig saved;
+    loadSensorNodeConfig(saved);
+    oledTitle = saved.deviceName.length() > 0 ? saved.deviceName : "DS18B20Grid " + macSuffix();
+  }
+  oledPresent = oled.begin(kOledAddress, true);
+  if (!oledPresent) {
+    Serial.println("OLED not detected -- skipping display.");
+  } else {
+    oled.setRotation(1);
+    oled.setTextColor(SH110X_WHITE);
+    oled.setTextSize(1);
+    // Show the device name right away rather than leaving the display in whatever it powered on
+    // with for the full settle delay below -- loop() (and its clearDisplay()) doesn't run until
+    // after that delay, up to 3 minutes. No battery icon yet -- readSOC() isn't called until
+    // loop() either.
+    drawTitleAndBattery(NAN);
+    paintStatus();
+    oled.display();
+  }
+  setSensorNodeStatusCallback(onStatus);
+
   node.checkFirmwareVersion(kFirmwareVersion);
   node.checkPendingCommand();
   node.checkPortalButton(kResetPin);
-  node.begin();  // connects Wi-Fi -- fetchConfig() below needs that, not the I2C bus
-
-  const SensorNodeConfig &config = node.config();
-  oledTitle = config.deviceName.length() > 0 ? config.deviceName : "DS18B20Grid " + macSuffix();
+  node.begin();
+  node.waitForWifi();  // fetchConfig() below needs the network, not the I2C bus
 
   bool gridConfigured = parseGridConfig(node.fetchConfig());
   if (!gridConfigured) {
@@ -374,26 +470,11 @@ void setup() {
     }
   }
 
-  Wire.begin();
   if (!bridge.begin(&Wire)) {
     Serial.println("DS2482-800 not detected -- all grid channels will read NAN.");
   }
   if (!battery.begin()) {
     Serial.println("MAX17048 not detected -- battery channel will read NAN.");
-  }
-  oledPresent = oled.begin(kOledAddress, true);
-  if (!oledPresent) {
-    Serial.println("OLED not detected -- skipping display.");
-  } else {
-    oled.setRotation(1);
-    oled.setTextColor(SH110X_WHITE);
-    oled.setTextSize(1);
-    // Show the device name right away rather than leaving the display in whatever it powered on
-    // with for the full settle delay below -- loop() (and its clearDisplay()) doesn't run until
-    // after that delay, up to 3 minutes. No battery icon yet -- readSOC() isn't called until
-    // loop() either.
-    drawTitleAndBattery(NAN);
-    oled.display();
   }
 
   // Verify each parsed ROM actually answers (a stale scratchpad read still passes CRC if the
@@ -409,7 +490,7 @@ void setup() {
     }
   }
 
-  delay(60UL * 1000);
+  node.idle(60UL * 1000);
 }
 
 void loop() {
@@ -440,7 +521,7 @@ void loop() {
   float soc = values.back();
 
   if (!oledPresent) {
-    delay(intervalMs);
+    node.idle(intervalMs);  // not delay(): keeps Wi-Fi reconnecting
     return;
   }
 
@@ -448,7 +529,7 @@ void loop() {
     // Everything fits on one page -- render once and sleep for the rest of the interval, same
     // as before paging existed.
     renderPage(reading, soc, 0);
-    delay(intervalMs);
+    node.idle(intervalMs);
     return;
   }
 
@@ -462,7 +543,7 @@ void loop() {
   while (elapsed < intervalMs) {
     renderPage(reading, soc, startCol);
     unsigned long thisPageMs = min(kPageMs, intervalMs - elapsed);
-    delay(thisPageMs);
+    node.idle(thisPageMs);
     elapsed += thisPageMs;
     startCol = (startCol == 0) ? kDisplayColumns : 0;
   }

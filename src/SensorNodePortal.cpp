@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "SensorNodeConfig.h"
+#include "SensorNodeStatus.h"
 
 // Last 6 hex digits of the MAC (its full non-OUI address space), not the first -- the first 3
 // octets are the vendor OUI, shared across a huge range of Espressif chips, so every device from
@@ -46,6 +47,12 @@ const byte kDnsPort = 53;
 DNSServer dnsServer;
 WebServer server(80);
 bool saved = false;
+bool handlersRegistered = false;
+bool portalUp = false;
+unsigned long savedAt = 0;
+// Last moment a phone was seen on the AP or sent a request -- see sensorNodePortalBusy().
+unsigned long lastActivity = 0;
+uint8_t lastStationCount = 0;
 
 // larsi.org's real favicon.ico (318 bytes), base64-inlined as a data URI -- avoids a separate
 // /favicon.ico route and the flash cost of a PROGMEM byte array, and the browser never makes a
@@ -181,6 +188,13 @@ void addOrUpdateNetwork(SensorNodeConfig &config, const String &ssid, const Stri
 // AP with multiple radios/bands otherwise shows up more than once).
 std::vector<String> scanNetworkNames() {
   int count = WiFi.scanNetworks();
+  if (count < 0) {
+    // A scan can fail while the background portal's station side is mid-connect attempt:
+    // drop that attempt (the next one starts on schedule) and scan once more.
+    WiFi.disconnect();
+    delay(100);
+    count = WiFi.scanNetworks();
+  }
   std::vector<std::pair<int32_t, String>> found;
   for (int i = 0; i < count; i++) {
     String ssid = WiFi.SSID(i);
@@ -282,9 +296,13 @@ String buildFormPage() {
   return page;
 }
 
-void handleRoot() { server.send(200, "text/html", buildFormPage()); }
+void handleRoot() {
+  lastActivity = millis();
+  server.send(200, "text/html", buildFormPage());
+}
 
 void handleSave() {
+  lastActivity = millis();
   // Start from the existing config, not a blank one, so the other
   // known-network slots (and anything the user didn't touch) survive.
   SensorNodeConfig config;
@@ -335,15 +353,19 @@ void handleSave() {
 // Any unrecognized path bounces back to the form -- this is what makes
 // phones/laptops auto-pop the captive portal page on connect.
 void handleNotFound() {
+  lastActivity = millis();
   server.sendHeader("Location", "/", true);
   server.send(302, "text/plain", "");
 }
 
 }  // namespace
 
-void runSensorNodeSetupPortal(uint32_t firmwareVersion) {
+void startSensorNodePortal(uint32_t firmwareVersion) {
+  if (portalUp) return;
   pendingFirmwareVersion = firmwareVersion;
 
+  // AP_STA, not AP alone: when this runs in the background (SensorNode::idle()), the station
+  // side keeps retrying the saved networks while the access point is up.
   WiFi.mode(WIFI_AP_STA);
 
   String apName = "SensorNode-Setup-" + macSuffix();
@@ -355,17 +377,62 @@ void runSensorNodeSetupPortal(uint32_t firmwareVersion) {
 
   dnsServer.start(kDnsPort, "*", apIP);
 
-  server.on("/", HTTP_GET, handleRoot);
-  server.on("/save", HTTP_POST, handleSave);
-  server.onNotFound(handleNotFound);
+  if (!handlersRegistered) {  // WebServer::on() appends, so a second start must not re-add
+    server.on("/", HTTP_GET, handleRoot);
+    server.on("/save", HTTP_POST, handleSave);
+    server.onNotFound(handleNotFound);
+    handlersRegistered = true;
+  }
   server.begin();
 
   saved = false;
-  unsigned long savedAt = 0;
+  savedAt = 0;
+  lastActivity = millis();
+  lastStationCount = 0;
+  portalUp = true;
+
+  // Reaches a display even from the blocking portals (firmware-version change, button hold),
+  // which never go back through SensorNode::service().
+  SensorNodeStatus st;
+  st.portal = true;
+  st.ip = apIP;
+  publishSensorNodeStatus(st);
+}
+
+void serviceSensorNodePortal() {
+  if (!portalUp) return;
+  dnsServer.processNextRequest();
+  server.handleClient();
+
+  uint8_t stations = WiFi.softAPgetStationNum();
+  if (stations > lastStationCount) lastActivity = millis();  // someone just joined the AP
+  lastStationCount = stations;
+
+  if (saved && savedAt == 0) savedAt = millis();
+  if (savedAt != 0 && millis() - savedAt > 1000) ESP.restart();
+}
+
+void stopSensorNodePortal() {
+  if (!portalUp) return;
+  server.stop();
+  dnsServer.stop();
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_STA);
+  portalUp = false;
+  Serial.println("[SensorNode] Setup portal closed.");
+}
+
+bool sensorNodePortalActive() { return portalUp; }
+
+bool sensorNodePortalBusy() {
+  if (!portalUp) return false;
+  if (saved) return true;  // a save is about to restart the device
+  return WiFi.softAPgetStationNum() > 0 && millis() - lastActivity < 5UL * 60 * 1000;
+}
+
+void runSensorNodeSetupPortal(uint32_t firmwareVersion) {
+  startSensorNodePortal(firmwareVersion);
   while (true) {
-    dnsServer.processNextRequest();
-    server.handleClient();
-    if (saved && savedAt == 0) savedAt = millis();
-    if (savedAt != 0 && millis() - savedAt > 1000) ESP.restart();
+    serviceSensorNodePortal();
   }
 }

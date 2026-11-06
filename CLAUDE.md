@@ -300,6 +300,41 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   requires (`arduino-esp32` issue #10526) and can hang or
   crash under load. If DNS starts failing/crashing again, fall back to hardcoding the resolved
   IP and passing `serverHost_` to `connect()` only for TLS SNI/the HTTP Host header.
+- **Reconnect and the background portal** (`begin()`, `service()`, `idle()` in `SensorNode.cpp`;
+  `start/service/stopSensorNodePortal()` in `SensorNodePortal.cpp`). Added 2026-11-05 after every
+  batcave node went silent ~10/22: before this, `begin()` connected once and `log()` just returned
+  false whenever Wi-Fi was down, with nothing ever calling `WiFi.begin()` again, and a boot with the
+  router down blocked forever in the setup portal. Now: `begin()` runs the portal blocking only
+  when nothing is saved; with saved networks that all fail it returns unconnected. `service()` owns
+  every reconnect (auto-reconnect is switched off so two never race): non-blocking attempts per
+  saved network (`connectTimeoutMs` each), then a pause that doubles 5 s -> 5 min with 25% jitter.
+  After 60 s offline it starts the portal in the background (AP_STA, so station retries go on);
+  it stops once connected unless `sensorNodePortalBusy()` (a phone on the AP active in the last
+  5 min, or a save pending), and reconnect attempts pause while it is busy. After 30 min offline
+  with nobody on the portal it `ESP.restart()`s (the RTC ring survives). The device cannot tell
+  "moved" from "router down", and does not need to. The firmware-version portal
+  (`checkFirmwareVersion()`) and the button portal stay blocking: no sensors run while they are up.
+  Sketches end `loop()` with `node.idle(ms)` instead of `delay(ms)` (idle ticks 200 ms, 5 ms while
+  the portal is up); a plain `delay()` still works but never reconnects. `waitForWifi()` is for
+  sketches whose `setup()` needs the network (`fetchConfig()` in OneWireNode/DS18B20GridNode).
+  Readings made before the clock is set carry seconds-since-boot; `syncTime()` shifts them onto the
+  real timeline by the clock's jump, and `log()` will not flush until the clock is set (TLS needs
+  the date anyway). Known limit: unsynced entries that survive an `ESP.restart()` get shifted by
+  the new boot's jump, so they can be off by up to the previous uptime. Deep sleep is still
+  unimplemented; the portal/idle design only needs the node awake while offline.
+  **Status for displays:** the library has no OLED dependency; it pushes a `SensorNodeStatus`
+  (`SensorNodeStatus.h`: connected, portal, ip - the AP's address while the portal is up, else the
+  LAN address - rssi, downSeconds, `level()` 1-3) to a callback set with
+  `setSensorNodeStatusCallback()`, only when something visible changed (down time at 5 s steps for
+  the first minute, then minutes). The blocking portals publish too, which is why the three OLED
+  sketches now initialize `Wire` and the OLED at the very top of `setup()` (title read straight
+  from NVS via `loadSensorNodeConfig()`) and register the callback before `checkFirmwareVersion()`.
+  Each sketch carries a duplicated-by-design copy of the bottom-row drawing (`paintStatus()`, y 56):
+  address in chars 1-15, a 3-char note at x 90 (`AP` or the time offline), and a 17 x 7 Wi-Fi icon
+  at x 110 (`kWifiIcon`: digit = lowest signal level that draws the pixel; crossed out by a 2 px
+  slash with a 1 px gap when offline). Every redraw that clears the screen must call
+  `paintStatus()` before `oled.display()`. `DS18B20GridNode` is capped at 6 probes per column so
+  title + 6 probe rows leave row 7 for this.
 - **`HTTPClient` is deliberately not used.** `log()` writes a raw
   HTTP/1.1 request straight to the socket immediately after
   `connect()` instead (`rawHttpRequest()`) -- on this hardware, the

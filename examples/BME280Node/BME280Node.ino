@@ -121,6 +121,76 @@ void drawTitleAndBattery(float soc) {
   }
 }
 
+// Bottom row (y 56-63) of the OLED: the address (at most 15 characters, 6 px each), a 3-character
+// note at x 90 ("AP" while the setup portal is up, the time offline otherwise) and a 17 x 7
+// Wi-Fi icon at x 110, crossed out when there is no connection. Fed by the library through
+// setSensorNodeStatusCallback() below; the same duplicated-by-design copy in every
+// OLED-equipped example, like the battery icon. The library only reports; what to draw is this
+// sketch's business.
+const int16_t kStatusY = 56;
+const int16_t kStatusNoteX = 90;
+const int16_t kWifiIconX = 110;
+SensorNodeStatus oledStatus;  // last status the library pushed
+
+// The icon, one string per row. A digit is the lowest signal level (1 weak .. 3 strong) at which
+// that pixel is drawn, so one picture serves all three levels. Offline draws level 3 plus a slash.
+const char *const kWifiIcon[7] = {
+    "....333333333....",
+    "..33.........33..",
+    ".3...2222222...3.",
+    "3..22.......22..3",
+    "..2...11111...2..",
+    ".....1.....1.....",
+    ".......111.......",
+};
+
+void drawWifiIcon(int16_t x, int16_t y, uint8_t level) {
+  uint8_t drawLevel = level == 0 ? 3 : level;
+  for (uint8_t row = 0; row < 7; row++) {
+    for (uint8_t col = 0; col < 17; col++) {
+      char c = kWifiIcon[row][col];
+      if (c != '.' && c - '0' <= drawLevel) oled.drawPixel(x + col, y + row, SH110X_WHITE);
+    }
+  }
+  if (level == 0) {
+    // Slash from top left to bottom right, 2 px wide with a 1 px gap cleared on both sides.
+    for (uint8_t row = 0; row < 7; row++) {
+      int16_t c = 2 + 2 * row;
+      oled.drawPixel(x + c - 1, y + row, SH110X_BLACK);
+      if (x + c + 2 < x + 17) oled.drawPixel(x + c + 2, y + row, SH110X_BLACK);
+      oled.drawPixel(x + c, y + row, SH110X_WHITE);
+      oled.drawPixel(x + c + 1, y + row, SH110X_WHITE);
+    }
+  }
+}
+
+// Draws the bottom row into the frame buffer (no oled.display()) -- called after every redraw
+// that clears the screen, and by onStatus() when the state changes.
+void paintStatus() {
+  const SensorNodeStatus &s = oledStatus;
+  oled.fillRect(0, kStatusY, kScreenWidth, 8, SH110X_BLACK);
+  oled.setCursor(0, kStatusY);
+  oled.print((s.portal || s.connected) ? s.ip.toString() : String("no Wi-Fi"));
+  char note[8] = "";
+  if (s.portal) {
+    strcpy(note, " AP");
+  } else if (!s.connected) {
+    if (s.downSeconds < 60) snprintf(note, sizeof(note), "%lus", (unsigned long)s.downSeconds);
+    else if (s.downSeconds < 3600) snprintf(note, sizeof(note), "%lum", (unsigned long)(s.downSeconds / 60));
+    else snprintf(note, sizeof(note), "%luh", (unsigned long)min<uint32_t>(s.downSeconds / 3600, 99));
+  }
+  oled.setCursor(kStatusNoteX, kStatusY);
+  oled.print(note);
+  drawWifiIcon(kWifiIconX, kStatusY, s.level());
+}
+
+void onStatus(const SensorNodeStatus &s) {
+  oledStatus = s;
+  if (!oledPresent) return;
+  paintStatus();
+  oled.display();
+}
+
 SensorNode node;
 BME280 bme;
 SensorNodeBattery battery;
@@ -129,21 +199,14 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  node.checkFirmwareVersion(kFirmwareVersion);
-  node.checkPendingCommand();
-  node.checkPortalButton(kResetPin);
-  node.begin();
-  if (node.needsProvisioning()) node.provision(kChannels);
-
-  const SensorNodeConfig &config = node.config();
-  oledTitle = config.deviceName.length() > 0 ? config.deviceName : "BME280 " + macSuffix();
-
+  // Display first, so even the blocking setup portals (firmware-version change, button hold) can
+  // show their address through the status callback. The title comes straight from NVS here:
+  // node.config() is only filled in by begin().
   Wire.begin();
-  if (!bme.beginI2C()) {
-    Serial.println("BME280 not detected -- check wiring.");
-  }
-  if (!battery.begin()) {
-    Serial.println("MAX17048 not detected -- battery channel will read NAN.");
+  {
+    SensorNodeConfig saved;
+    loadSensorNodeConfig(saved);
+    oledTitle = saved.deviceName.length() > 0 ? saved.deviceName : "BME280 " + macSuffix();
   }
   oledPresent = oled.begin(kOledAddress, true);
   if (!oledPresent) {
@@ -157,7 +220,22 @@ void setup() {
     // until after that delay, up to 3 minutes. No battery icon yet -- readSOC() isn't called
     // until loop() either.
     drawTitleAndBattery(NAN);
+    paintStatus();
     oled.display();
+  }
+  setSensorNodeStatusCallback(onStatus);
+
+  node.checkFirmwareVersion(kFirmwareVersion);
+  node.checkPendingCommand();
+  node.checkPortalButton(kResetPin);
+  node.begin();
+  if (node.needsProvisioning()) node.provision(kChannels);
+
+  if (!bme.beginI2C()) {
+    Serial.println("BME280 not detected -- check wiring.");
+  }
+  if (!battery.begin()) {
+    Serial.println("MAX17048 not detected -- battery channel will read NAN.");
   }
 
   // The very first reading right after boot occasionally comes back as a
@@ -167,7 +245,7 @@ void setup() {
   // minute to settle -- fixed, not derived from logIntervalMinutes (whose
   // portal-enforced minimum is already 1), so there's no long-interval
   // device sitting dark for its whole first cycle to guard against.
-  delay(60UL * 1000);
+  node.idle(60UL * 1000);
 }
 
 void loop() {
@@ -181,6 +259,7 @@ void loop() {
 
   // Zipped positionally against kChannels -- picks up each entry's id/decimalPlaces from there.
   // No need to pad channels 4-14 by hand; log() fills the gap up to channel 15 itself.
+  if (node.needsProvisioning()) node.provision(kChannels);  // retried here too: setup() may have been offline
   node.log(kChannels, readings);
   node.applyPendingCommand();
 
@@ -192,8 +271,9 @@ void loop() {
     // Reads label/decimalPlaces/unit straight from kChannels, so the OLED can't drift from
     // what log() above and provision() actually use -- all three read the same rows.
     printReadings(readings);
+    paintStatus();
     oled.display();
   }
 
-  delay(node.config().logIntervalMinutes * 60UL * 1000);
+  node.idle(node.config().logIntervalMinutes * 60UL * 1000);  // not delay(): keeps Wi-Fi reconnecting
 }
