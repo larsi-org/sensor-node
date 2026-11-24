@@ -12,7 +12,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   added first, NVS keys `ssid0`/`password0`/`ssid1`/...) plus
   `deviceName`/`deviceId`/`writeKey`/`logIntervalMinutes`/`reportEveryCycles`/`serverUrl`, all
   persisted via `Preferences` (NVS). `writeKey` is displayed/documented everywhere as "API key"
-  (the same credential gates both writes and the read-only `sensors/config` endpoint) but keeps
+  (the same credential gates both writes and the read-only `config` endpoint) but keeps
   its old field/NVS-key name for compatibility with already-flashed devices -- see
   `SensorNodePortal.cpp`'s note at the API key form field. `reportEveryCycles` (1-12, default 1)
   drives `SensorNode::log()`'s own flush cadence (see the RTC ring buffer section below) and
@@ -138,7 +138,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   substring-search the full raw response, this caller needs clean content with no stray header
   bytes). A plain fetch for a sketch that needs its own server-hosted config beyond
   `provision()`'s fixed fields, e.g. `DS18B20GridNode.ino`/`OneWireNode.ino` fetching their
-  per-deployment ROM-ID grid layout from `sensors/config.php` (`larsi-org/html` repo) -- that
+  per-deployment ROM-ID grid layout from `api/sensors/config.php` (`larsi-org/html` repo) -- that
   endpoint resolves `key` to a prefix server-side the same way `log.php`/`provision.php` do, so
   the device itself never needs to know its own prefix. Doesn't touch NVS or any persisted
   state, unlike `log()`/`provision()`. `sanitizeHostname()` derives the
@@ -299,7 +299,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   100% -- the MAX17048's own SOC estimate regularly overshoots past
   100% while charging (a known quirk of its ModelGauge algorithm, not
   a bug in this wrapper or upstream `SFE_MAX1704X`), and every sketch
-  logs the raw return value straight to the `sensors/log` API, so
+  logs the raw return value straight to the `log` API, so
   clamping here is the one place that fixes it for every device.
 
 ## Networking

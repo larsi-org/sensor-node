@@ -235,8 +235,8 @@ Library" libraries from the Library Manager.
   POST-only. Unlike those two, this doesn't touch NVS or any persisted state -- a plain fetch
   for a sketch that needs its own server-hosted config beyond `provision()`'s fixed fields, e.g.
   `examples/DS18B20GridNode`/`examples/OneWireNode`'s per-deployment ROM-ID grid layout, served by
-  `larsi-org/html`'s `sensors/config.php` (which resolves `key` to a location prefix
-  server-side, the same way `sensors/log.php`/`provision.php` do). Call after `begin()` has
+  `larsi-org/html`'s `api/sensors/config.php` (which resolves `key` to a location prefix
+  server-side, the same way `api/sensors/log.php`/`provision.php` do). Call after `begin()` has
   connected.
 
 ### `SensorNodeBattery`
