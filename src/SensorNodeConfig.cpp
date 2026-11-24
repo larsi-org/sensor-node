@@ -5,11 +5,10 @@
 namespace {
 const char *kNamespace = "sensornode";
 
-// The server's API moved to /api/sensors/ (2026-11-23); the old /sensors/ URLs still work there,
-// but a node saved with the old default is moved to the new one when its settings are loaded (a
-// reflash keeps saved settings). A URL typed by hand into the portal is left as it is.
+// Only the default knows a server: the saved URL is the real base address, used as it is, so a
+// node can report to any server with the same endpoints. A reflash keeps saved settings, so a
+// node changes server only through the portal (the examples bump kFirmwareVersion to open it).
 const char *kDefaultServerUrl = "https://larsi.org/api/sensors/";
-const char *kOldDefaultServerUrl = "https://larsi.org/sensors/";
 }
 
 bool loadSensorNodeConfig(SensorNodeConfig &config) {
@@ -25,7 +24,6 @@ bool loadSensorNodeConfig(SensorNodeConfig &config) {
   config.logIntervalMinutes = prefs.getUChar("logInterval", 5);
   config.reportEveryCycles = prefs.getUChar("reportEvery", 1);
   config.serverUrl = prefs.getString("serverUrl", kDefaultServerUrl);
-  if (config.serverUrl == kOldDefaultServerUrl) config.serverUrl = kDefaultServerUrl;
   prefs.end();
   return config.isComplete();
 }

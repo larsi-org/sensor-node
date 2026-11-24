@@ -18,8 +18,10 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   drives `SensorNode::log()`'s own flush cadence (see the RTC ring buffer section below) and
   also rides along on `provision()`'s POST body so the server can size `zeus_minutes` to match.
   `serverUrl` (default `"https://larsi.org/api/sensors/"` via `loadSensorNodeConfig()`'s
-  `getString()` default; a saved `"https://larsi.org/sensors/"`, the default before
-  2026-11-24, is replaced by it on load, since a reflash keeps NVS) is the base URL `log()`/`provision()` build their requests against --
+  `getString()` default; the saved value is the real base address, used as it is -- the
+  firmware knows nothing about larsi.org's layout, Lars 2026-11-24: anyone may run their own
+  server. A reflash keeps NVS, so moving existing nodes to a new URL means the portal: the
+  examples' `kFirmwareVersion` was bumped for that the same day) is the base URL `log()`/`provision()` build their requests against --
   `parseServerUrl()` (`SensorNodePortal.h`) splits it into a bare hostname and a base path
   guaranteed to end in `/`, discarding whatever scheme was typed (this library always connects
   over TLS on port 443 regardless -- no port-override support). There's no separate device-

@@ -34,10 +34,10 @@ String oledTitle;  // deviceName, else a hardcoded fallback -- set in setup()
 const int kResetPin = 2;
 
 // Bump to force the setup portal open once on the next boot, without touching the reset
-// button/jumper -- see checkFirmwareVersion(). Currently 5 to force one portal visit on
-// this board once it's repurposed as device 1 (a new board is taking over as device 0),
-// so its device id can be retyped from 0 to 1 without a factory reset.
-const uint32_t kFirmwareVersion = 5;
+// button/jumper -- see checkFirmwareVersion(). 6: the default server URL moved to
+// https://larsi.org/api/sensors/ (2026-11-24); the portal opens once so a node saved with the
+// old https://larsi.org/sensors/ can be changed.
+const uint32_t kFirmwareVersion = 6;
 
 // Log the battery's state of charge on channel 15? The OLED's battery icon shows it either way;
 // logging it is off by default (on a node powered over USB it barely moves). See

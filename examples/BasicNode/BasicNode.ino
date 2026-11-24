@@ -31,7 +31,9 @@ const int kResetPin = 2;
 // Bump this to force the setup portal open once on the next boot -- e.g. after adding a new
 // config field to the portal you want existing devices to fill in, without needing physical
 // access to the reset button. See checkFirmwareVersion().
-const uint32_t kFirmwareVersion = 1;
+// 2: the default server URL moved to https://larsi.org/api/sensors/ (2026-11-24); the portal
+// opens once so a node saved with the old https://larsi.org/sensors/ can be changed.
+const uint32_t kFirmwareVersion = 2;
 
 // Shared by provision() (only actually posted when needsProvisioning() is true -- see setup()
 // below) and log() (zipped positionally against the values list there -- kChannels[0] has to

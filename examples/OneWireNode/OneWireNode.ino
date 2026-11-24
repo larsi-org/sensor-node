@@ -181,10 +181,9 @@ void onStatus(const SensorNodeStatus &s) {
 const int kResetPin = 2;
 
 // Bump this to force the setup portal open once on the next boot -- see checkFirmwareVersion().
-// Bumped for the switch to config-driven channels (2026-08-30): the channel list this sketch
-// provisions is no longer the old fixed 5-probe "Temp1".."Temp5" shape, so every existing
-// deployment needs to reprovision.
-const uint32_t kFirmwareVersion = 3;
+// 4: the default server URL moved to https://larsi.org/api/sensors/ (2026-11-24); the portal
+// opens once so a node saved with the old https://larsi.org/sensors/ can be changed.
+const uint32_t kFirmwareVersion = 4;
 
 // GPIO3 -- the only other pin free of every strapping/peripheral reservation on this board
 // family, alongside GPIO2 (kResetPin above) -- see the library's CLAUDE.md. 1-Wire is

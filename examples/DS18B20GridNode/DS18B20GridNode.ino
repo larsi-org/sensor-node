@@ -64,7 +64,9 @@ const bool kLogBattery = false;
 bool logBattery = false;
 
 // Bump this to force the setup portal open once on the next boot -- see checkFirmwareVersion().
-const uint32_t kFirmwareVersion = 1;
+// 2: the default server URL moved to https://larsi.org/api/sensors/ (2026-11-24); the portal
+// opens once so a node saved with the old https://larsi.org/sensors/ can be changed.
+const uint32_t kFirmwareVersion = 2;
 
 // DS2482-800 defaults to 0x18 -- checked clear of this board's other I2C devices (MAX17048
 // 0x36, OLED 0x3C) regardless of how the address pins end up strapped (whole range is
