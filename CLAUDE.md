@@ -280,9 +280,11 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   board itself (not a plug-in sensor like BME280, so it lives in `src/`
   rather than an example sketch). Logging it is optional (2026-11-24, Lars: on
   USB-powered nodes the value barely moved and nothing charted it): each example has
-  `kLogBattery` (false), adds `SensorNodeBattery::channel()` (channel 15,
-  `kSocChannel`) and the SOC value only when it is true, and always reads the SOC
-  for the OLED icon. With it off, channel 15 is free: the grid sketches then take 16
+  `kLogBattery` (false); `logBattery` = `kLogBattery` and `battery.begin()` found the
+  meter, decided in `setup()` before `provision()` (Lars: no meter = no battery logging
+  and no provisioning). Only then does a sketch add `SensorNodeBattery::channel()`
+  (channel 15, `kSocChannel`) and the SOC value; it always reads the SOC for the OLED
+  icon, which is not drawn when the reading is NAN (no meter). With it off, channel 15 is free: the grid sketches then take 16
   probes (`kMaxProbes`/`kMaxTotalProbes`). See README.md. Because this is compiled unconditionally as
   part of the library (Arduino builds every `.cpp` under `src/`
   regardless of what a sketch `#include`s), the "SparkFun MAX1704x Fuel

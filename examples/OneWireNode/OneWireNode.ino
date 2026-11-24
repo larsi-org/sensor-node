@@ -202,6 +202,10 @@ DallasTemperature dsSensors(&oneWire);
 // SensorNodeBattery.h.
 const bool kLogBattery = false;
 
+// kLogBattery and a battery meter that answered at boot (setup()): without the meter the battery
+// is neither provisioned nor logged.
+bool logBattery = false;
+
 // Channel budget: 0-15 for probes, or 0-14 when the battery is logged on 15, the same ceiling as
 // DS18B20GridNode.ino's kMaxTotalProbes, since both sketches can read the same config file.
 const uint8_t kMaxProbes = kLogBattery ? 15 : 16;
@@ -379,7 +383,11 @@ void setup() {
   for (uint8_t i = 0; i < probeCount; i++) {
     channels.push_back({i, "DS18B20", "Temperature", "C", probeLabel[i]});
   }
-  if (kLogBattery) channels.push_back(SensorNodeBattery::channel());
+  // The battery meter is looked for before anything is provisioned: no meter, no battery channel.
+  bool batteryPresent = battery.begin();
+  if (!batteryPresent) Serial.println("MAX17048 not detected -- no battery icon, battery not logged.");
+  logBattery = kLogBattery && batteryPresent;
+  if (logBattery) channels.push_back(SensorNodeBattery::channel());
 
   // Provisioning needs the real channel list, which only exists once the probe config has been
   // fetched -- skip it entirely on a boot where that failed rather than registering an empty/
@@ -393,9 +401,6 @@ void setup() {
     }
   }
 
-  if (!battery.begin()) {
-    Serial.println("MAX17048 not detected -- battery channel will read NAN.");
-  }
 
   // isConnected() (not getAddress-by-index) so detection is keyed on the parsed ROM codes
   // themselves, not on bus enumeration order -- a probe found here is confirmed to be one of
@@ -436,7 +441,7 @@ void loop() {
     values.push_back(value);
   }
   float soc = battery.readSOC();  // battery state of charge %, for the OLED icon
-  if (kLogBattery) values.push_back(soc);  // channel 15, see channels in setup()
+  if (logBattery) values.push_back(soc);  // channel 15, see channels in setup()
 
   node.log(channels, values);
   node.applyPendingCommand();  // handles open_portal/scan_i2c if either ever shows up here too

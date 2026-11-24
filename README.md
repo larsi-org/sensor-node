@@ -39,7 +39,9 @@ tell them apart, that's what free-text `deviceName` is for (e.g.
 `"sensor-node-basement"`) -- there's no separate location field.
 
 Logging the board's battery state of charge is optional (each example's
-`kLogBattery`, off by default; the OLED shows a battery icon either way).
+`kLogBattery`, off by default) and needs the meter to answer at boot: without
+it the battery is neither provisioned nor logged, and the OLED shows no icon.
+With a meter, the OLED shows the icon whether or not the battery is logged.
 When it is logged it is channel 15, the last of each device's 16, via
 `SensorNodeBattery::channel()` -- see the API section below; otherwise
 all 16 channels are free for whatever the sketch measures.

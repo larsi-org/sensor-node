@@ -1,5 +1,5 @@
 // BME280 sensor node: temperature, dew point, humidity, and pressure
-// on channels 0-3; the onboard battery is shown on the OLED and logged on channel 15 only with kLogBattery.
+// on channels 0-3; the onboard battery is shown on the OLED and logged on channel 15 only with kLogBattery and a meter present.
 //
 // Requires the "SparkFun BME280" library (Arduino Library Manager:
 // search "SparkFun BME280"). Wire the breakout to the board's
@@ -44,8 +44,12 @@ const uint32_t kFirmwareVersion = 5;
 // SensorNodeBattery.h.
 const bool kLogBattery = false;
 
+// kLogBattery and a battery meter that answered at boot (setup()): without the meter the battery
+// is neither provisioned nor logged.
+bool logBattery = false;
+
 // Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
-// hPa, and with kLogBattery 15: battery state of charge % (SensorNodeBattery::channel()). See
+// hPa, and with logBattery 15: battery state of charge % (SensorNodeBattery::channel()). See
 // BasicNode.ino for when this actually gets posted (needsProvisioning()). Both log() and
 // printReadings() (below, for the OLED) zip this positionally against a values list, so it has
 // to stay temp/dew point/humidity/pressure(/SOC) in this order -- reordering it without updating loop()'s
@@ -58,26 +62,27 @@ const bool kLogBattery = false;
 // datasheet accuracy backs up: BME280 is +-0.5C / +-3%RH / +-1hPa temp/dew point/humidity/
 // pressure, MAX17048 is roughly +-1% SOC) are never read by provision(); they're here purely
 // for printReadings()/log() below to share.
+// Built in setup(), once the battery meter has been looked for.
 std::vector<SensorNodeChannel> channelList() {
-  std::vector<SensorNodeChannel> channels = {
+  std::vector<SensorNodeChannel> list = {
       {0, "BME280", "Temperature", "C", "Temp", 1},
       {1, "BME280", "Dew Point Temperature", "C", "Dew", 1},
       {2, "BME280", "Relative Humidity", "%", "Humid", 0},
       {3, "BME280", "Pressure", "hPa", "Press", 1},
   };
-  if (kLogBattery) channels.push_back(SensorNodeBattery::channel());
-  return channels;
+  if (logBattery) list.push_back(SensorNodeBattery::channel());
+  return list;
 }
-const std::vector<SensorNodeChannel> kChannels = channelList();
+std::vector<SensorNodeChannel> channels;
 
-// Prints one OLED line per value, e.g. "Temp:  21.5 C", zipped positionally against kChannels
-// the same way log() is (values[i] labeled/rounded/unit-ed from kChannels[i]) -- pass fewer
-// values than kChannels to show only the first several rather than slicing kChannels itself.
+// Prints one OLED line per value, e.g. "Temp:  21.5 C", zipped positionally against channels
+// the same way log() is (values[i] labeled/rounded/unit-ed from channels[i]) -- pass fewer
+// values than channels to show only the first several rather than slicing channels itself.
 const size_t kLabelColumnWidth = 7;
 
 void printReadings(const std::vector<float> &values) {
-  for (size_t i = 0; i < values.size() && i < kChannels.size(); i++) {
-    const SensorNodeChannel &channel = kChannels[i];
+  for (size_t i = 0; i < values.size() && i < channels.size(); i++) {
+    const SensorNodeChannel &channel = channels[i];
     String label = String(channel.label) + ":";
     while (label.length() < kLabelColumnWidth) label += " ";
     // (unsigned int) cast: ESP32 core's String(float, unsigned int) is otherwise ambiguous
@@ -233,17 +238,20 @@ void setup() {
   }
   setSensorNodeStatusCallback(onStatus);
 
+  // The battery meter is looked for before anything is provisioned: no meter, no battery channel.
+  bool batteryPresent = battery.begin();
+  if (!batteryPresent) Serial.println("MAX17048 not detected -- no battery icon, battery not logged.");
+  logBattery = kLogBattery && batteryPresent;
+  channels = channelList();
+
   node.checkFirmwareVersion(kFirmwareVersion);
   node.checkPendingCommand();
   node.checkPortalButton(kResetPin);
   node.begin();
-  if (node.needsProvisioning()) node.provision(kChannels);
+  if (node.needsProvisioning()) node.provision(channels);
 
   if (!bme.beginI2C()) {
     Serial.println("BME280 not detected -- check wiring.");
-  }
-  if (!battery.begin()) {
-    Serial.println("MAX17048 not detected -- battery channel will read NAN.");
   }
 
   // The very first reading right after boot occasionally comes back as a
@@ -264,12 +272,12 @@ void loop() {
   float soc  = battery.readSOC();               // battery state of charge %, for the OLED icon
 
   std::vector<float> readings = {ch0, ch1, ch2, ch3};
-  if (kLogBattery) readings.push_back(soc);     // channel 15, see kChannels
+  if (logBattery) readings.push_back(soc);      // channel 15, see channelList()
 
-  // Zipped positionally against kChannels -- picks up each entry's id/decimalPlaces from there.
+  // Zipped positionally against channels -- picks up each entry's id/decimalPlaces from there.
   // No need to pad channels 4-14 by hand; log() fills the gap up to channel 15 itself.
-  if (node.needsProvisioning()) node.provision(kChannels);  // retried here too: setup() may have been offline
-  node.log(kChannels, readings);
+  if (node.needsProvisioning()) node.provision(channels);  // retried here too: setup() may have been offline
+  node.log(channels, readings);
   node.applyPendingCommand();
 
   // "Current values" text screen -- entirely skipped if the OLED wasn't
@@ -277,7 +285,7 @@ void loop() {
   if (oledPresent) {
     drawTitleAndBattery(soc);
     oled.setCursor(0, 8);
-    // Reads label/decimalPlaces/unit straight from kChannels, so the OLED can't drift from
+    // Reads label/decimalPlaces/unit straight from channels, so the OLED can't drift from
     // what log() above and provision() actually use -- all three read the same rows.
     printReadings(readings);
     paintStatus();

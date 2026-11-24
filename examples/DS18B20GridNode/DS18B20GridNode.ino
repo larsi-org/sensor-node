@@ -59,6 +59,10 @@ const int kResetPin = 2;
 // SensorNodeBattery.h.
 const bool kLogBattery = false;
 
+// kLogBattery and a battery meter that answered at boot (setup()): without the meter the battery
+// is neither provisioned nor logged.
+bool logBattery = false;
+
 // Bump this to force the setup portal open once on the next boot -- see checkFirmwareVersion().
 const uint32_t kFirmwareVersion = 1;
 
@@ -461,7 +465,11 @@ void setup() {
       channels.push_back({nextId++, "DS18B20", "Temperature", "C"});
     }
   }
-  if (kLogBattery) channels.push_back(SensorNodeBattery::channel());
+  // The battery meter is looked for before anything is provisioned: no meter, no battery channel.
+  bool batteryPresent = battery.begin();
+  if (!batteryPresent) Serial.println("MAX17048 not detected -- no battery icon, battery not logged.");
+  logBattery = kLogBattery && batteryPresent;
+  if (logBattery) channels.push_back(SensorNodeBattery::channel());
 
   // Provisioning needs the real channel list, which only exists once the grid config has been
   // fetched -- skip it entirely on a boot where that failed rather than registering an empty/
@@ -477,9 +485,6 @@ void setup() {
 
   if (!bridge.begin(&Wire)) {
     Serial.println("DS2482-800 not detected -- all grid channels will read NAN.");
-  }
-  if (!battery.begin()) {
-    Serial.println("MAX17048 not detected -- battery channel will read NAN.");
   }
 
   // Verify each parsed ROM actually answers (a stale scratchpad read still passes CRC if the
@@ -518,7 +523,7 @@ void loop() {
     }
   }
   float soc = battery.readSOC();  // battery state of charge %, for the OLED icon
-  if (kLogBattery) values.push_back(soc);  // channel 15, see channels in setup()
+  if (logBattery) values.push_back(soc);  // channel 15, see channels in setup()
 
   node.log(channels, values);
   node.applyPendingCommand();
