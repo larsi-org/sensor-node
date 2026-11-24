@@ -227,12 +227,14 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   instead of a second counter, since exactly one push happens per call; `reportEveryCycles
   == 1` (the default, and every device's setting until re-provisioned otherwise) flushes
   every single call, identical to `log()`'s pre-buffering behavior. A flush walks every
-  slot from `tail` to `head`, building one request with repeated `data[]=`/`t[]=` pairs
-  (`t[]` = seconds before `now`, matching the batched wire form `sensors/log.php`/
-  `larsi.org/api/sensors/` already document and accept) -- `tail` only advances to `head`
-  once the response confirms `"Data logged"`; a failed or skipped flush leaves `tail`
-  alone, so the next flush attempt naturally resends the whole backlog combined with
-  whatever's accumulated since, with no separate retry path. A `log()` call that pushes
+  slot from `tail` to `head`, building one request with repeated `data[]=`/`e[]=` pairs
+  (`e[]` = the slot's own epoch, the batched wire form `larsi.org/api/sensors/` documents)
+  -- `tail` only advances to `head` once the response confirms `"Data logged"`; a failed
+  or skipped flush leaves `tail` alone, so the next flush attempt naturally resends the
+  whole backlog combined with whatever's accumulated since, with no separate retry path.
+  A flush the server logged but whose answer was lost is resent too; absolute times make
+  that harmless, since the server skips a channel's value at a time it already has (the
+  older `t[]` ages turned into times a second or two off and could log it twice). A `log()` call that pushes
   but doesn't attempt a flush that wake returns `true` (queued, not sent) rather than the
   pre-buffering "server confirmed" meaning -- no example sketch reads `log()`'s return value
   (they all discard it: `node.log(...)` as a bare statement in every `loop()`).

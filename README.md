@@ -188,7 +188,8 @@ Library" libraries from the Library Manager.
   this wake doesn't also flush, or the flush fails. Only every
   `config().reportEveryCycles`-th call actually POSTs anything,
   batching everything queued since the last confirmed flush into one
-  request (`data[]`/`t[]` pairs -- see
+  request (`data[]`/`e[]` pairs, each reading with its own time, so a
+  flush resent after a lost answer is not logged twice -- see
   [larsi.org/api/sensors/#batched-reports](https://larsi.org/api/sensors/#batched-reports)
   section); `reportEveryCycles == 1` (the default)
   flushes every call, identical to this method's behavior before

@@ -540,10 +540,14 @@ bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::
 
   service();  // a flush wake is a good moment to notice a drop (or a recovery)
   if (WiFi.status() != WL_CONNECTED) return false;  // still queued -- next flush wake retries
-  if (!clockIsSet()) return false;  // TLS and the readings' offsets both need the real time
+  if (!clockIsSet()) return false;  // TLS needs the real time
   if (!resolveServerIp()) return false;
 
-  uint32_t now = (uint32_t)time(nullptr);
+  // Each entry goes with its own absolute time (e[], epoch seconds), not an age: if the server
+  // logged a flush but its answer never arrived, tail stays put and the next flush sends the same
+  // entries again, and only an absolute time lets the server recognize them as already logged
+  // (it skips a channel's value at a time it already has). A slot buffered before NTP set the
+  // clock carries a 1970 time and is dropped by the server as too old.
   String body = "key=" + config_.writeKey + "&device=" + String(config_.deviceId);
   for (uint32_t i = rtcRing.tail; i != rtcRing.head; i++) {
     const RTCRingSlot &entry = rtcRing.slots[i & (kRingCapacity - 1)];
@@ -555,8 +559,7 @@ bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::
       // directly -- neither is a strictly better match across both arguments.
       if (!isnan(entry.values[id])) data += String(entry.values[id], (unsigned int)decimalPlacesById[id]);
     }
-    uint32_t offset = now > entry.epoch ? now - entry.epoch : 0;
-    body += "&data[]=" + data + "&t[]=" + String(offset);
+    body += "&data[]=" + data + "&e[]=" + String(entry.epoch);
   }
 
   String response = postToServer(serverIp_, serverHost_, serverBasePath_ + "log", body);
