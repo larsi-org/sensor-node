@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Arduino library for ESP32 sensor nodes that report to
-`larsi.org/sensors/log`. Repo root doubles as the Arduino library root
+`larsi.org/api/sensors/log`. Repo root doubles as the Arduino library root
 (`library.properties`, `src/`, `examples/`) -- installed by
 cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 
@@ -17,8 +17,9 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `SensorNodePortal.cpp`'s note at the API key form field. `reportEveryCycles` (1-12, default 1)
   drives `SensorNode::log()`'s own flush cadence (see the RTC ring buffer section below) and
   also rides along on `provision()`'s POST body so the server can size `zeus_minutes` to match.
-  `serverUrl` (default `"https://larsi.org/sensors/"` via `loadSensorNodeConfig()`'s
-  `getString()` default) is the base URL `log()`/`provision()` build their requests against --
+  `serverUrl` (default `"https://larsi.org/api/sensors/"` via `loadSensorNodeConfig()`'s
+  `getString()` default; a saved `"https://larsi.org/sensors/"`, the default before
+  2026-11-24, is replaced by it on load, since a reflash keeps NVS) is the base URL `log()`/`provision()` build their requests against --
   `parseServerUrl()` (`SensorNodePortal.h`) splits it into a bare hostname and a base path
   guaranteed to end in `/`, discarding whatever scheme was typed (this library always connects
   over TLS on port 443 regardless -- no port-override support). There's no separate device-
@@ -106,7 +107,7 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   address itself, so this is the one field firmware has to carry over explicitly), and a
   `channel_id,sensor,property,unit` list (`SensorNodeChannel[]`, one entry per channel --
   fixed per sketch in every example except `DS18B20GridNode.ino`/`OneWireNode.ino`, which build
-  their list at runtime from a fetched grid config, see below) to `/sensors/provision` -- gated by `needsProvisioning()`
+  their list at runtime from a fetched grid config, see below) to `provision` -- gated by `needsProvisioning()`
   (`SensorNodeConfig`'s `provisionPending` NVS flag), not called
   unconditionally every boot: it can't run from inside the portal
   itself (the device isn't online as a station yet at that point), so

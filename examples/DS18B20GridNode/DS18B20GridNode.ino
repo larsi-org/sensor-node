@@ -18,7 +18,7 @@
 //
 // GRID CONFIG (2026-08-27): which probes exist and where they sit in the grid comes from a
 // per-deployment text file fetched at boot via SensorNode::fetchConfig() -- a POST of this
-// device's key/device id to https://larsi.org/sensors/config (same auth as log()/provision()),
+// device's key/device id to https://larsi.org/api/sensors/config (same auth as log()/provision()),
 // which the server resolves to this device's location.prefix and returns
 // sensors/config/<prefix>-<deviceId>.txt's raw content. That file isn't directly web-accessible
 // (Require-all-denied) -- config.php gates every read behind the API key, both so a stray

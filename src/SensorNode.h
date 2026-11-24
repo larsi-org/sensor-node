@@ -216,5 +216,5 @@ class SensorNode {
   unsigned long lastClockTry_ = 0;
   IPAddress serverIp_;
   String serverHost_;
-  String serverBasePath_ = "/";  // e.g. "/sensors/" -- log()/provision() append "log"/"provision"
+  String serverBasePath_ = "/";  // e.g. "/api/sensors/" -- log()/provision() append "log"/"provision"
 };

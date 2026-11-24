@@ -33,7 +33,7 @@ struct SensorNodeConfig {
   // unbuffered behavior.
   uint8_t reportEveryCycles = 1;
 
-  // Base URL API calls are built against, e.g. "https://larsi.org/sensors/" -- log()/
+  // Base URL API calls are built against, e.g. "https://larsi.org/api/sensors/" -- log()/
   // provision() append "log"/"provision" onto it directly (see parseServerUrl(),
   // SensorNodePortal.h). Defaults to larsi.org (loadSensorNodeConfig()'s getString() default),
   // not hardcoded, so a node can be pointed at a different server without a firmware change.

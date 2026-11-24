@@ -564,7 +564,7 @@ bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::
 
   String response = postToServer(serverIp_, serverHost_, serverBasePath_ + "log", body);
 
-  Serial.printf("[SensorNode] POST /sensors/log (device=%d, body=%s):\n%s\n", config_.deviceId, body.c_str(), response.c_str());
+  Serial.printf("[SensorNode] POST %slog (device=%d, body=%s):\n%s\n", serverBasePath_.c_str(), config_.deviceId, body.c_str(), response.c_str());
 
   bool confirmed = response.indexOf("Data logged") >= 0;
   if (confirmed) {
@@ -632,7 +632,7 @@ bool SensorNode::provision(const std::vector<SensorNodeChannel> &channels) {
                 "&reportEvery=" + String(config_.reportEveryCycles) + "&channels=" + channelList;
   String response = postToServer(serverIp_, serverHost_, serverBasePath_ + "provision", body);
 
-  Serial.printf("[SensorNode] POST /sensors/provision:\n%s\n", response.c_str());
+  Serial.printf("[SensorNode] POST %sprovision:\n%s\n", serverBasePath_.c_str(), response.c_str());
 
   bool confirmed = response.indexOf("Provisioned") >= 0;
   if (confirmed) clearProvisionPending();

@@ -1,7 +1,7 @@
 # sensor-node
 
 An Arduino library for ESP32-based sensor nodes that report to
-[larsi.org/sensors/log](https://larsi.org/api/sensors/#log-data).
+[larsi.org/api/sensors/log](https://larsi.org/api/sensors/#log-data).
 Handles Wi-Fi provisioning and posting readings; bring your own
 sensors.
 
@@ -269,7 +269,9 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
   `applyPendingCommand()` in `loop()`, or at the top of `setup()` for one that needs to run
   before `begin()` connects) and call `clearPendingCommand()` once you've handled it.
 - The server is a portal-configured "Server URL" field (default
-  `https://larsi.org/sensors/`, `SensorNodeConfig::serverUrl`), not a
+  `https://larsi.org/api/sensors/`, `SensorNodeConfig::serverUrl`; a
+  node saved with the old default `https://larsi.org/sensors/` is moved
+  to the new one when it loads its settings), not a
   hardcoded constant -- `log()`/`provision()` build their requests
   against it directly. The scheme is accepted but ignored: this
   library always connects over TLS on port 443 regardless of what's

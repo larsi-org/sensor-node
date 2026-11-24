@@ -7,8 +7,8 @@
 // fallback title) the same way the AP name and default device name already do.
 String macSuffix();
 
-// Splits a server URL like "https://larsi.org/sensors/" into a bare hostname ("larsi.org")
-// and a base path guaranteed to start and end with "/" ("/sensors/") -- SensorNode builds its
+// Splits a server URL like "https://larsi.org/api/sensors/" into a bare hostname ("larsi.org")
+// and a base path guaranteed to start and end with "/" ("/api/sensors/") -- SensorNode builds its
 // API endpoints by appending "log"/"provision" directly onto basePath. The scheme (if any) is
 // accepted but ignored: SensorNode always connects over TLS on port 443 regardless of what's
 // typed, and there's no port-override support, so "http://", "https://", or no scheme at all

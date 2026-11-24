@@ -4,6 +4,12 @@
 
 namespace {
 const char *kNamespace = "sensornode";
+
+// The server's API moved to /api/sensors/ (2026-11-23); the old /sensors/ URLs still work there,
+// but a node saved with the old default is moved to the new one when its settings are loaded (a
+// reflash keeps saved settings). A URL typed by hand into the portal is left as it is.
+const char *kDefaultServerUrl = "https://larsi.org/api/sensors/";
+const char *kOldDefaultServerUrl = "https://larsi.org/sensors/";
 }
 
 bool loadSensorNodeConfig(SensorNodeConfig &config) {
@@ -18,7 +24,8 @@ bool loadSensorNodeConfig(SensorNodeConfig &config) {
   config.writeKey = prefs.getString("writeKey", "");
   config.logIntervalMinutes = prefs.getUChar("logInterval", 5);
   config.reportEveryCycles = prefs.getUChar("reportEvery", 1);
-  config.serverUrl = prefs.getString("serverUrl", "https://larsi.org/sensors/");
+  config.serverUrl = prefs.getString("serverUrl", kDefaultServerUrl);
+  if (config.serverUrl == kOldDefaultServerUrl) config.serverUrl = kDefaultServerUrl;
   prefs.end();
   return config.isComplete();
 }

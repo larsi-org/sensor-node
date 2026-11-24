@@ -6,7 +6,7 @@
 //
 // PROBE CONFIG (2026-08-30): which probes exist comes from a per-deployment text file fetched at
 // boot via SensorNode::fetchConfig() -- same mechanism and file format as DS18B20GridNode.ino's
-// grid config (a POST of this device's key/device id to https://larsi.org/sensors/config, which
+// grid config (a POST of this device's key/device id to https://larsi.org/api/sensors/config, which
 // resolves to sensors/config/<prefix>-<deviceId>.txt's raw content). This sketch flattens that
 // file's per-line/per-column layout into one list, read combined off the single physical bus on
 // kOneWirePin -- there's no DS2482-800 I2C-to-1-Wire bridge on this station yet (see the library's
