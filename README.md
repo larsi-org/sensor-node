@@ -1,7 +1,7 @@
 # sensor-node
 
 An Arduino library for ESP32-based sensor nodes that report to
-[larsi.org/sensors/log](https://larsi.org/sensors/api.php#log-data).
+[larsi.org/sensors/log](https://larsi.org/api/sensors/#log-data).
 Handles Wi-Fi provisioning and posting readings; bring your own
 sensors.
 
@@ -31,7 +31,7 @@ adding one new network.
 The device id is what makes a single API key usable for more than
 one physical node without their channel numbers colliding -- each
 device id gets its own block of 16 channels (see "Data Channel" in the
-[API reference](https://larsi.org/sensors/api.php#data-channel)).
+[API reference](https://larsi.org/api/sensors/#data-channel)).
 Different sensor nodes attached to the same location/key get different
 device ids; what sensors are actually wired to a given node is up to
 each sketch. If you have more than one device at a station and want to
@@ -125,7 +125,7 @@ Library" libraries from the Library Manager.
   `begin()` -- see `examples/BasicNode`/`examples/BME280Node` for the
   wiring (a button to GND).
 - `void checkPendingCommand()` -- checks for a one-shot test command left by an earlier
-  `log()` call (see below and [larsi.org/sensors/api.php](https://larsi.org/sensors/api.php)'s
+  `log()` call (see below and [larsi.org/api/sensors/](https://larsi.org/api/sensors/)'s
   `Command:`/`pending_command` docs), and if it's `"open_portal"` -- the only value this
   owns -- clears it and opens the setup portal (never returning). A no-op for anything
   else, including a command this build doesn't recognize at all: that's deliberately not
@@ -189,7 +189,7 @@ Library" libraries from the Library Manager.
   `config().reportEveryCycles`-th call actually POSTs anything,
   batching everything queued since the last confirmed flush into one
   request (`data[]`/`t[]` pairs -- see
-  [larsi.org/sensors/api.php#batched-reports](https://larsi.org/sensors/api.php#batched-reports)
+  [larsi.org/api/sensors/#batched-reports](https://larsi.org/api/sensors/#batched-reports)
   section); `reportEveryCycles == 1` (the default)
   flushes every call, identical to this method's behavior before
   buffering existed. A queued-but-not-this-wake call returns `true`
