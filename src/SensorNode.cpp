@@ -503,14 +503,15 @@ bool SensorNode::log(const std::vector<SensorNodeChannel> &channels, const std::
     decimalPlacesById[id] = channels[i].decimalPlaces;
   }
 
-  // A cycle whose only reading is the battery (channel 15, reserved sitewide for it) logs nothing
-  // at all: a node whose real sensors are all dead (e.g. a disconnected 1-Wire bus) must go
-  // silent on the server so staleness checks notice, instead of looking alive on battery alone.
-  // The same rule makes an all-NAN cycle log nothing, rather than an empty row that would keep
-  // device.last_epoch fresh.
+  // A cycle whose only reading is the battery (the channel marked battery, see
+  // SensorNodeBattery::channel()) logs nothing at all: a node whose real sensors are all dead
+  // (e.g. a disconnected 1-Wire bus) must go silent on the server so staleness checks notice,
+  // instead of looking alive on battery alone. The same rule makes an all-NAN cycle log nothing,
+  // rather than an empty row that would keep device.last_epoch fresh. Keyed to the flag, not to
+  // channel 15: a sketch that doesn't log the battery may use channel 15 for a real sensor.
   bool anyNonBatteryReading = false;
-  for (uint8_t id = 0; id < kMaxChannels - 1; id++) {
-    if (!isnan(byId[id])) {
+  for (size_t i = 0; i < values.size() && i < channels.size(); i++) {
+    if (!channels[i].battery && channels[i].id < kMaxChannels && !isnan(values[i])) {
       anyNonBatteryReading = true;
       break;
     }

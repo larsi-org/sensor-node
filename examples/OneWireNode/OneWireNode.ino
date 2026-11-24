@@ -7,7 +7,7 @@
 // PROBE CONFIG (2026-08-30): which probes exist comes from a per-deployment text file fetched at
 // boot via SensorNode::fetchConfig() -- same mechanism and file format as DS18B20GridNode.ino's
 // grid config (a POST of this device's key/device id to https://larsi.org/api/sensors/config, which
-// resolves to sensors/config/<prefix>-<deviceId>.txt's raw content). This sketch flattens that
+// resolves to api/sensors/config-files/<prefix>-<deviceId>.txt's raw content). This sketch flattens that
 // file's per-line/per-column layout into one list, read combined off the single physical bus on
 // kOneWirePin -- there's no DS2482-800 I2C-to-1-Wire bridge on this station yet (see the library's
 // CLAUDE.md), so there's no way to address each line as an independent bus the way GridNode does.
@@ -197,10 +197,14 @@ const int kOneWirePin = 3;
 OneWire oneWire(kOneWirePin);
 DallasTemperature dsSensors(&oneWire);
 
-// Channel budget: 0-14 for probes (channel 15 is always the battery, reserved sitewide -- see
-// SensorNodeBattery::kSocChannel), same ceiling as DS18B20GridNode.ino's kMaxTotalProbes, since
-// both sketches can read the same config file.
-const uint8_t kMaxProbes = 15;
+// Log the battery's state of charge on channel 15? The OLED's battery icon shows it either way;
+// logging it is off by default (on a node powered over USB it barely moves). See
+// SensorNodeBattery.h.
+const bool kLogBattery = false;
+
+// Channel budget: 0-15 for probes, or 0-14 when the battery is logged on 15, the same ceiling as
+// DS18B20GridNode.ino's kMaxTotalProbes, since both sketches can read the same config file.
+const uint8_t kMaxProbes = kLogBattery ? 15 : 16;
 
 uint8_t probeCount = 0;
 uint8_t romId[kMaxProbes][8];
@@ -375,7 +379,7 @@ void setup() {
   for (uint8_t i = 0; i < probeCount; i++) {
     channels.push_back({i, "DS18B20", "Temperature", "C", probeLabel[i]});
   }
-  channels.push_back({SensorNodeBattery::kSocChannel, "MAX17048", "State of Charge", "%"});
+  if (kLogBattery) channels.push_back(SensorNodeBattery::channel());
 
   // Provisioning needs the real channel list, which only exists once the probe config has been
   // fetched -- skip it entirely on a boot where that failed rather than registering an empty/
@@ -431,7 +435,8 @@ void loop() {
     }
     values.push_back(value);
   }
-  values.push_back(battery.readSOC());  // battery state of charge %
+  float soc = battery.readSOC();  // battery state of charge %, for the OLED icon
+  if (kLogBattery) values.push_back(soc);  // channel 15, see channels in setup()
 
   node.log(channels, values);
   node.applyPendingCommand();  // handles open_portal/scan_i2c if either ever shows up here too
@@ -439,7 +444,7 @@ void loop() {
   // Title + battery icon only, same as BME280Node.ino -- no per-reading text yet, see the file
   // header comment. Skipped entirely if the OLED wasn't detected at boot.
   if (oledPresent) {
-    drawTitleAndBattery(values.back());
+    drawTitleAndBattery(soc);
     paintStatus();
     oled.display();
   }

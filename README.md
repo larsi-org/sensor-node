@@ -38,9 +38,11 @@ each sketch. If you have more than one device at a station and want to
 tell them apart, that's what free-text `deviceName` is for (e.g.
 `"sensor-node-basement"`) -- there's no separate location field.
 
-Channel 15 (the last of each device's 16) is reserved sitewide for
-battery state of charge, via `SensorNodeBattery` -- see the API section
-below. That leaves 0-14 for whatever the sketch actually measures.
+Logging the board's battery state of charge is optional (each example's
+`kLogBattery`, off by default; the OLED shows a battery icon either way).
+When it is logged it is channel 15, the last of each device's 16, via
+`SensorNodeBattery::channel()` -- see the API section below; otherwise
+all 16 channels are free for whatever the sketch measures.
 
 ## Install
 
@@ -83,7 +85,7 @@ void loop() {
 See `examples/BasicNode` for a fuller version, including a pin you can
 hold at boot to reach the setup portal on demand, or `examples/
 BME280Node` for a real sensor (temperature, dew point, humidity,
-pressure, plus battery state of charge on channel 15) -- needs the
+pressure, plus battery state of charge on channel 15 with `kLogBattery`) -- needs the
 separate "SparkFun BME280" and "SparkFun MAX1704x Fuel Gauge Arduino
 Library" libraries from the Library Manager.
 
@@ -179,7 +181,8 @@ Library" libraries from the Library Manager.
   `node.log(kChannels, {ch0, ch1})` to skip channels 2+ some call). A
   `NAN` value is left out of the request entirely, which the log
   endpoint treats as "skip this channel" rather than logging a zero.
-  A call where every channel except the battery (channel 15) is `NAN`
+  A call where every channel except the battery (the entry marked
+  `battery`, see `SensorNodeBattery::channel()`) is `NAN`
   logs nothing at all and returns false, so a node whose sensors have all
   failed goes silent on the server instead of looking alive on battery
   readings alone.
@@ -240,10 +243,11 @@ Thin wrapper around the onboard MAX17048 fuel gauge (see `#include
 <SensorNodeBattery.h>`), for boards in this family that have one
 (e.g. the SparkFun ESP32-C6 Thing Plus):
 
-- `static const uint8_t kSocChannel = 15` -- the reserved channel number;
-  use it in both `kChannels` (`{SensorNodeBattery::kSocChannel, "MAX17048",
-  "State of Charge", "%"}`) and the matching position in `log()`'s
-  vector, so the two never drift apart.
+- `static SensorNodeChannel channel()` -- the entry to add to the channel
+  list when the battery is logged: channel 15 (`kSocChannel`), MAX17048,
+  "State of Charge" in %, marked `battery` so `log()` doesn't count it as
+  a sensor reading. Add the matching `readSOC()` value at the same position
+  in `log()`'s vector. Reading the battery for a display needs neither.
 - `bool begin(TwoWire &wirePort = Wire)` -- connects to the chip and
   runs `quickStart()`. Returns false if it doesn't respond.
 - `float readSOC()` -- state of charge, 0-100% (clamped in software --

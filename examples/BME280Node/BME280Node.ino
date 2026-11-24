@@ -1,5 +1,5 @@
 // BME280 sensor node: temperature, dew point, humidity, and pressure
-// on channels 0-3, plus onboard battery state of charge on channel 15.
+// on channels 0-3; the onboard battery is shown on the OLED and logged on channel 15 only with kLogBattery.
 //
 // Requires the "SparkFun BME280" library (Arduino Library Manager:
 // search "SparkFun BME280"). Wire the breakout to the board's
@@ -39,12 +39,16 @@ const int kResetPin = 2;
 // so its device id can be retyped from 0 to 1 without a factory reset.
 const uint32_t kFirmwareVersion = 5;
 
+// Log the battery's state of charge on channel 15? The OLED's battery icon shows it either way;
+// logging it is off by default (on a node powered over USB it barely moves). See
+// SensorNodeBattery.h.
+const bool kLogBattery = false;
+
 // Channel 0: temperature C, 1: dew point C, 2: humidity %, 3: pressure
-// hPa, 15: battery state of charge % (SensorNodeBattery::kSocChannel --
-// reserved sitewide, see the library's README.md). See BasicNode.ino
-// for when this actually gets posted (needsProvisioning()). Both log() and printReadings()
-// (below, for the OLED) zip this positionally against a values list, so it has to stay
-// temp/dew point/humidity/pressure/SOC in this order -- reordering it without updating loop()'s
+// hPa, and with kLogBattery 15: battery state of charge % (SensorNodeBattery::channel()). See
+// BasicNode.ino for when this actually gets posted (needsProvisioning()). Both log() and
+// printReadings() (below, for the OLED) zip this positionally against a values list, so it has
+// to stay temp/dew point/humidity/pressure(/SOC) in this order -- reordering it without updating loop()'s
 // calls to match would silently misfile a reading onto the wrong channel, not just mislabel it
 // on screen.
 //
@@ -54,13 +58,17 @@ const uint32_t kFirmwareVersion = 5;
 // datasheet accuracy backs up: BME280 is +-0.5C / +-3%RH / +-1hPa temp/dew point/humidity/
 // pressure, MAX17048 is roughly +-1% SOC) are never read by provision(); they're here purely
 // for printReadings()/log() below to share.
-const std::vector<SensorNodeChannel> kChannels = {
-    {0, "BME280", "Temperature", "C", "Temp", 1},
-    {1, "BME280", "Dew Point Temperature", "C", "Dew", 1},
-    {2, "BME280", "Relative Humidity", "%", "Humid", 0},
-    {3, "BME280", "Pressure", "hPa", "Press", 1},
-    {SensorNodeBattery::kSocChannel, "MAX17048", "State of Charge", "%", "Batt", 0},
-};
+std::vector<SensorNodeChannel> channelList() {
+  std::vector<SensorNodeChannel> channels = {
+      {0, "BME280", "Temperature", "C", "Temp", 1},
+      {1, "BME280", "Dew Point Temperature", "C", "Dew", 1},
+      {2, "BME280", "Relative Humidity", "%", "Humid", 0},
+      {3, "BME280", "Pressure", "hPa", "Press", 1},
+  };
+  if (kLogBattery) channels.push_back(SensorNodeBattery::channel());
+  return channels;
+}
+const std::vector<SensorNodeChannel> kChannels = channelList();
 
 // Prints one OLED line per value, e.g. "Temp:  21.5 C", zipped positionally against kChannels
 // the same way log() is (values[i] labeled/rounded/unit-ed from kChannels[i]) -- pass fewer
@@ -253,9 +261,10 @@ void loop() {
   float ch2  = bme.readFloatHumidity();         // humidity %
   float ch3  = bme.readFloatPressure() / 100.0; // pressure hPa
   float ch1  = bme.dewPointC();                 // dew point C
-  float ch15 = battery.readSOC();               // battery state of charge %
+  float soc  = battery.readSOC();               // battery state of charge %, for the OLED icon
 
-  std::vector<float> readings = {ch0, ch1, ch2, ch3, ch15};
+  std::vector<float> readings = {ch0, ch1, ch2, ch3};
+  if (kLogBattery) readings.push_back(soc);     // channel 15, see kChannels
 
   // Zipped positionally against kChannels -- picks up each entry's id/decimalPlaces from there.
   // No need to pad channels 4-14 by hand; log() fills the gap up to channel 15 itself.
@@ -266,7 +275,7 @@ void loop() {
   // "Current values" text screen -- entirely skipped if the OLED wasn't
   // detected at boot, so this is a no-op on a board with none wired up.
   if (oledPresent) {
-    drawTitleAndBattery(ch15);
+    drawTitleAndBattery(soc);
     oled.setCursor(0, 8);
     // Reads label/decimalPlaces/unit straight from kChannels, so the OLED can't drift from
     // what log() above and provision() actually use -- all three read the same rows.

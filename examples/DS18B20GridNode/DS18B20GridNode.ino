@@ -20,7 +20,7 @@
 // per-deployment text file fetched at boot via SensorNode::fetchConfig() -- a POST of this
 // device's key/device id to https://larsi.org/api/sensors/config (same auth as log()/provision()),
 // which the server resolves to this device's location.prefix and returns
-// sensors/config/<prefix>-<deviceId>.txt's raw content. That file isn't directly web-accessible
+// api/sensors/config-files/<prefix>-<deviceId>.txt's raw content. That file isn't directly web-accessible
 // (Require-all-denied) -- config.php gates every read behind the API key, both so a stray
 // prefix/deviceId guess can't read another station's layout and for consistency with every other
 // sensor-node endpoint. This replaces hardcoding known ROM codes or discovering them via bus
@@ -39,8 +39,8 @@
 // (see the top comment) -- parsing stops accepting new IDs once that's hit, wherever in the
 // file that happens to be. Channel ids are assigned consecutively in file order (column A's IDs
 // first, then B's, then C's, then D's) -- e.g. a 2-line file "a1,a2,a3\nb1,b2,b3" assigns
-// channel 0=a1, 1=a2, 2=a3, 3=b1, 4=b2, 5=b3 (channel 15 is always the battery, never part of
-// this count). Blank lines and blank/malformed individual IDs are skipped with a Serial warning
+// channel 0=a1, 1=a2, 2=a3, 3=b1, 4=b2, 5=b3 (up to 16 probes, channels 0-15; 15 when kLogBattery
+// logs the battery there). Blank lines and blank/malformed individual IDs are skipped with a Serial warning
 // rather than aborting the whole parse -- a typo in one ID shouldn't cost every other probe in
 // the file.
 
@@ -53,6 +53,11 @@
 
 // Same reset pin and rationale as BasicNode.ino.
 const int kResetPin = 2;
+
+// Log the battery's state of charge on channel 15? The OLED's battery icon shows it either way;
+// logging it is off by default (on a node powered over USB it barely moves). See
+// SensorNodeBattery.h.
+const bool kLogBattery = false;
 
 // Bump this to force the setup portal open once on the next boot -- see checkFirmwareVersion().
 const uint32_t kFirmwareVersion = 1;
@@ -69,7 +74,7 @@ Adafruit_DS248x bridge;
 // actual parsed shape, which can be smaller in every dimension.
 const uint8_t kMaxColumns = 4;
 const uint8_t kMaxProbesPerColumn = 6;
-const uint8_t kMaxTotalProbes = 15;  // channel ids 0-14; 15 is always the battery
+const uint8_t kMaxTotalProbes = kLogBattery ? 15 : 16;  // channel ids 0-15, or 0-14 with the battery on 15
 const uint8_t kBridgeChannel[kMaxColumns] = {0, 1, 2, 3};
 
 uint8_t columnCount = 0;
@@ -456,7 +461,7 @@ void setup() {
       channels.push_back({nextId++, "DS18B20", "Temperature", "C"});
     }
   }
-  channels.push_back({SensorNodeBattery::kSocChannel, "MAX17048", "State of Charge", "%"});
+  if (kLogBattery) channels.push_back(SensorNodeBattery::channel());
 
   // Provisioning needs the real channel list, which only exists once the grid config has been
   // fetched -- skip it entirely on a boot where that failed rather than registering an empty/
@@ -512,13 +517,13 @@ void loop() {
       values.push_back(value);
     }
   }
-  values.push_back(battery.readSOC());  // battery state of charge %
+  float soc = battery.readSOC();  // battery state of charge %, for the OLED icon
+  if (kLogBattery) values.push_back(soc);  // channel 15, see channels in setup()
 
   node.log(channels, values);
   node.applyPendingCommand();
 
   unsigned long intervalMs = node.config().logIntervalMinutes * 60UL * 1000;
-  float soc = values.back();
 
   if (!oledPresent) {
     node.idle(intervalMs);  // not delay(): keeps Wi-Fi reconnecting

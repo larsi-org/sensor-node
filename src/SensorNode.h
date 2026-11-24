@@ -18,7 +18,9 @@
 // server/reports and can run long, e.g. "Dew Point Temperature" vs. a 21-char OLED line).
 // Both default (label to "", decimalPlaces to 1 -- most hobby-grade sensors' real accuracy
 // backs up one decimal place, not two) so a sketch that doesn't care about either can leave
-// them unset.
+// them unset. battery marks the board's own battery reading (SensorNodeBattery::channel()
+// sets it): log() doesn't count it as a sensor reading (see there), so it never needs
+// setting by hand.
 struct SensorNodeChannel {
   uint8_t id;
   const char *sensor;
@@ -26,6 +28,7 @@ struct SensorNodeChannel {
   const char *unit;
   const char *label = "";
   uint8_t decimalPlaces = 1;
+  bool battery = false;
 };
 
 class SensorNode {

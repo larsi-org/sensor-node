@@ -68,12 +68,13 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
   `decimalPlaces[16]` (NaN-filled, id-indexed) from the zip before
   buffering it (see the RTC ring buffer paragraph below) -- that's
   what lets a sketch skip hand-padding `NAN`s up to a gap like channel
-  15 (`examples/BME280Node`: `node.log(kChannels, {ch0, ch1, ch2, ch3,
-  ch15})` -- no channels 4-14 to write out by hand). A call where every
-  id below 15 is NAN returns before buffering anything (battery alone
-  doesn't count as a reading; an all-NAN call likewise), so a node with
-  dead sensors goes stale on the server instead of staying "alive" via
-  channel 15. A flush always
+  15 (`examples/BME280Node` with `kLogBattery`: channels 0-3 then the battery
+  on 15 -- no channels 4-14 to write out by hand). A call where every entry not
+  marked `battery` (`SensorNodeChannel::battery`, set by `SensorNodeBattery::channel()`)
+  is NAN returns before buffering anything (battery alone doesn't count as a reading; an
+  all-NAN call likewise), so a node with dead sensors goes stale on the server instead of
+  staying "alive" on its battery. Keyed to the flag, not to channel 15, since a sketch that
+  doesn't log the battery may use 15 for a sensor. A flush always
   serializes all 16 ids per queued entry, not just up to the highest id used that call -- the
   log endpoint's per-entry parsing already treats a trailing empty field the same as a missing
   one, so this is wire-compatible, just a few bytes larger. `values` can also
@@ -277,9 +278,12 @@ cloning/symlinking into `~/Arduino/libraries/`, not via a build step.
 - `SensorNodeBattery` (`src/SensorNodeBattery.*`) -- thin wrapper around
   SparkFun's `SFE_MAX1704X` for the MAX17048 fuel gauge that's on the
   board itself (not a plug-in sensor like BME280, so it lives in `src/`
-  rather than an example sketch). `kSocChannel = 15` is the sitewide
-  reservation (the last of a device's 16 channels) for battery state of
-  charge -- see README.md. Because this is compiled unconditionally as
+  rather than an example sketch). Logging it is optional (2026-11-24, Lars: on
+  USB-powered nodes the value barely moved and nothing charted it): each example has
+  `kLogBattery` (false), adds `SensorNodeBattery::channel()` (channel 15,
+  `kSocChannel`) and the SOC value only when it is true, and always reads the SOC
+  for the OLED icon. With it off, channel 15 is free: the grid sketches then take 16
+  probes (`kMaxProbes`/`kMaxTotalProbes`). See README.md. Because this is compiled unconditionally as
   part of the library (Arduino builds every `.cpp` under `src/`
   regardless of what a sketch `#include`s), the "SparkFun MAX1704x Fuel
   Gauge Arduino Library" dependency now applies to every sketch using
