@@ -87,7 +87,8 @@ void loop() {
 See `examples/BasicNode` for a fuller version, including a pin you can
 hold at boot to reach the setup portal on demand, or `examples/
 BME280Node` for a real sensor (temperature, dew point, humidity,
-pressure, plus battery state of charge on channel 15 with `kLogBattery`) -- needs the
+pressure, plus battery state of charge on channel 15 with `kLogBattery`; a reading the
+sensor cannot physically produce re-initializes it, and is never logged) -- needs the
 separate "SparkFun BME280" and "SparkFun MAX1704x Fuel Gauge Arduino
 Library" libraries from the Library Manager.
 

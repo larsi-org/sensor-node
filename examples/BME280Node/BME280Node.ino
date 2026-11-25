@@ -208,6 +208,52 @@ SensorNode node;
 BME280 bme;
 SensorNodeBattery battery;
 
+// A reading the BME280 cannot physically produce means the sensor has gone wrong, not the
+// weather: seen in production (batcave basement, 2026-11-24) after a reboot, when the sensor kept
+// returning humidity 0, a temperature that barely moved and pressure 178 hPa low (still following
+// the real pressure) for 8 hours until a power cycle -- the signature of calibration constants
+// read wrong at beginI2C(), which the library never reads again. Only the three measured values
+// are checked: the dew point is computed from temperature and humidity. Hard physical limits, not
+// unusual weather, so no real cold snap or storm can trip them:
+// - humidity <= 0 or > 100: the compensation formula clamps to 0..100, so an exact 0 means it
+//   computed a negative value (real air is never near 0%); 100 is real (fog, condensation).
+// - pressure outside 870..1090 hPa: every sea-level pressure ever recorded, with room for a
+//   node a few hundred meters up (station pressure, not reduced to sea level).
+// - temperature outside -40..85 C: the chip's rated range.
+// NAN fails every comparison, so it fails the check too.
+bool readingsPlausible(float t, float rh, float p) {
+  return t >= -40 && t <= 85 && rh > 0 && rh <= 100 && p >= 870 && p <= 1090;
+}
+
+// Reads temperature, humidity and pressure into t/rh/p; on an implausible reading soft-resets the
+// sensor, runs beginI2C() again (chip ID check, calibration constants read again, settings
+// written) and reads once more. Returns whether the readings are plausible; when false the
+// caller logs nothing from the sensor this cycle and tries again next cycle.
+bool readBme(float &t, float &rh, float &p) {
+  t = bme.readTempC();
+  rh = bme.readFloatHumidity();
+  p = bme.readFloatPressure() / 100.0;
+  if (readingsPlausible(t, rh, p)) return true;
+
+  Serial.printf("BME280 implausible (T %.2f C, RH %.2f %%, P %.2f hPa) -- re-initializing.\n", t, rh, p);
+  bme.reset();
+  delay(10);  // the datasheet's 2 ms start-up time after a reset, with margin
+  if (!bme.beginI2C()) {
+    Serial.println("BME280 not detected after reset -- check wiring.");
+    return false;
+  }
+  delay(100);  // let a full measurement cycle finish in normal mode before reading again
+  t = bme.readTempC();
+  rh = bme.readFloatHumidity();
+  p = bme.readFloatPressure() / 100.0;
+  if (readingsPlausible(t, rh, p)) {
+    Serial.println("BME280 recovered.");
+    return true;
+  }
+  Serial.printf("BME280 still implausible (T %.2f C, RH %.2f %%, P %.2f hPa) -- nothing logged.\n", t, rh, p);
+  return false;
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -265,10 +311,10 @@ void setup() {
 }
 
 void loop() {
-  float ch0  = bme.readTempC();                 // temperature C
-  float ch2  = bme.readFloatHumidity();         // humidity %
-  float ch3  = bme.readFloatPressure() / 100.0; // pressure hPa
-  float ch1  = bme.dewPointC();                 // dew point C
+  float ch0, ch2, ch3;                           // temperature C, humidity %, pressure hPa
+  bool bmeOk = readBme(ch0, ch2, ch3);
+  float ch1  = bmeOk ? bme.dewPointC() : NAN;   // dew point C, only from readings that passed
+  if (!bmeOk) ch0 = ch2 = ch3 = NAN;            // log() skips NAN values; all NAN logs nothing
   float soc  = battery.readSOC();               // battery state of charge %, for the OLED icon
 
   std::vector<float> readings = {ch0, ch1, ch2, ch3};
@@ -287,7 +333,8 @@ void loop() {
     oled.setCursor(0, 8);
     // Reads label/decimalPlaces/unit straight from channels, so the OLED can't drift from
     // what log() above and provision() actually use -- all three read the same rows.
-    printReadings(readings);
+    if (bmeOk) printReadings(readings);
+    else oled.println("BME280 fault");
     paintStatus();
     oled.display();
   }
